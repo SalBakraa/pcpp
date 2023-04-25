@@ -130,4 +130,26 @@ int main(int argc, char **argv) {
 
 	Cstr_Array lines = cstr_split_newline(buffer);
 	free(buffer);
+
+	// Merge lines that end in '\'
+	for (size_t i = 0; i < lines.count;) {
+		size_t line_len = strlen(lines.elems[i]);
+		// Avoid lines ending in \\<newline>
+		if (!(lines.elems[i][line_len-1] == '\\' && lines.elems[i][line_len-2] != '\\')) {
+			i++;
+			continue;
+		}
+
+		Cstr next_line = cstr_array_remove(&lines, lines.elems[i+1]);
+		size_t next_line_len = strlen(next_line);
+
+		size_t total_line_len = next_line_len + (line_len - 1); // don't count the '\' character
+		lines.elems[i] = realloc((char *) lines.elems[i], sizeof *lines.elems[i] * (total_line_len + 1));
+		if (lines.elems[i] == NULL) {
+			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+		}
+
+		memcpy((char *) lines.elems[i] + (line_len-1), next_line, next_line_len +1);
+		free((char *)next_line);
+	}
 }
