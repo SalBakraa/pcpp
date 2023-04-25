@@ -1,0 +1,19 @@
+# Files and directories to ignore
+
+# User-specific files
+*.user
+
+# IDE Stuff
+.ccls
+.ccls-cache
+
+# Build Results
+[Dd]ebug/
+[Rr]elease/
+x64/
+build/
+nbuild
+nbuild.old
+install/
+[Bb]in/
+[Oo]bj/
