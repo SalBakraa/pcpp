@@ -1,6 +1,90 @@
 #define NOBUILD_IMPLEMENTATION
 #include "../nobuild.h"
 
+#include <stdbool.h>
+
+bool parse_new_line(const char *input, size_t in_len, size_t *index) {
+	int state = 0;
+	size_t i = *index;
+	while (i < in_len) {
+		char current_char = input[i];
+		switch (state) {
+			case 0: // initial state
+				if (current_char == '\r') {
+					state = 1;
+					i++;
+					break;
+				}
+
+				(*index) = i + (current_char == '\n');
+				return current_char == '\n';
+			case 1: // after a '\r' character
+				(*index) = i + (current_char == '\n');
+				return true;
+		}
+	}
+
+	(*index) = i;
+	return state == 1;
+}
+
+Cstr_Array cstr_split_newline(Cstr cstr)
+{
+	size_t len = strlen(cstr);
+	size_t substr_count = 1;
+	for (size_t i = 0; i < len;) {
+		if (!parse_new_line(cstr, len,  &i)) {
+			++i;
+			continue;
+		}
+
+		++substr_count;
+	}
+
+	// if no new lines
+	if (substr_count == 1) {
+		return CSTR_ARRAY_MAKE(cstr);
+	}
+
+	Cstr_Array ret = { .count = substr_count };
+	ret.elems = malloc(sizeof *ret.elems * ret.count);
+	if (ret.elems == NULL) {
+		PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+	}
+
+	size_t substr_start = 0;
+	size_t substr_index = 0;
+	for (size_t i = 0; i < len;) {
+		size_t delim_end = i;
+		if (!parse_new_line(cstr, len,  &delim_end)) {
+			i++;
+			continue;
+		}
+
+		size_t substr_len = i - substr_start;
+		char *substr = malloc(sizeof *substr * (substr_len + 1));
+		if (substr == NULL) {
+			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+		}
+
+		substr[substr_len] = '\0';
+		ret.elems[substr_index++] = memcpy(substr, (cstr + substr_start), sizeof *substr * substr_len);
+		substr_start = delim_end;
+		i = delim_end;
+	}
+
+	// Add the last substring
+	size_t substr_len = len - substr_start;
+	char *substr = malloc(sizeof *substr * (substr_len + 1));
+	if (substr == NULL) {
+		PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+	}
+
+	substr[substr_len] = '\0';
+	ret.elems[substr_index++] = memcpy(substr, (cstr + substr_start), sizeof *substr * substr_len);
+	return ret;
+}
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		PANIC("No argument was specified.");
@@ -43,4 +127,7 @@ int main(int argc, char **argv) {
 	for (size_t i = 0; i < read_count; ++i) {
 		buffer[i] = buffer[i] == '\0' ? ' ' : buffer[i];
 	}
+
+	Cstr_Array lines = cstr_split_newline(buffer);
+	free(buffer);
 }
