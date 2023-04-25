@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "lexer.h"
+
 bool parse_new_line(const char *input, size_t in_len, size_t *index) {
 	int state = 0;
 	size_t i = *index;
@@ -151,5 +153,19 @@ int main(int argc, char **argv) {
 
 		memcpy((char *) lines.elems[i] + (line_len-1), next_line, next_line_len +1);
 		free((char *)next_line);
+	}
+
+	for (size_t i = 0; i < lines.count; ++i) {
+		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
+		INFO("Line %zu: %s", i, lines.elems[i]);
+		while (true) {
+			C_TOKENS tok = lexer_lex();
+			if (tok == DONE) {
+				break;
+			}
+			INFO("\tTOKEN: %s", C_TOKENS_STRING[tok]);
+		}
+
+		lexer__delete_buffer(line_buf);
 	}
 }
