@@ -23,14 +23,13 @@
 
 #define WARNING_FLAGS "-Wall", "-Wextra", "-Wshadow", "-Wconversion", "-Wduplicated-cond", "-Wduplicated-branches", "-Wrestrict", "-Wnull-dereference", "-Wjump-misses-init"
 #define C_FLAGS "-std=c18", DEBUG_FLAGS, WARNING_FLAGS
-#define BUILD_CMD "cc", C_FLAGS, CONCAT("-o", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // LSP stuff
 static void create_ccls_file(const char *binary_path) {
 	if (is_path1_modified_after_path2(binary_path, ".ccls")){
-		CHAIN(CHAIN_CMD("echo", JOIN("\n", "clang", BUILD_CMD)), CHAIN_OUT(PATH(SRC_DIR, ".ccls")));
+		CHAIN(CHAIN_CMD("echo", JOIN("\n", "clang", C_FLAGS)), CHAIN_OUT(PATH(SRC_DIR, ".ccls")));
 	}
 }
 
@@ -44,7 +43,7 @@ static void build(void) {
 		MKDIRS(BUILD_DIR);
 	}
 
-	CMD(BUILD_CMD);
+	CMD("cc", C_FLAGS, CONCAT("-o", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c"));
 }
 
 int main(int argc, char **argv)
