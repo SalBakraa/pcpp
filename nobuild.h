@@ -412,6 +412,8 @@ void file_to_c_array(Cstr path, Cstr out_path, Cstr array_type,  Cstr array_name
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef NOBUILD_IMPLEMENTATION
+#ifndef NOBUILD_I_
+#define NOBUILD_I_
 
 #ifdef _WIN32
 LPSTR GetLastErrorAsString(void)
@@ -1699,4 +1701,5 @@ void file_to_c_array(Cstr path, Cstr out_path, Cstr array_type, Cstr array_name,
     fd_close(output_file);
 }
 
+#endif // NOBUILD_I_
 #endif // NOBUILD_IMPLEMENTATION
