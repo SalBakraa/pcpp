@@ -23,7 +23,7 @@
 
 #define WARNING_FLAGS "-Wall", "-Wextra", "-Wshadow", "-Wconversion", "-Wduplicated-cond", "-Wduplicated-branches", "-Wrestrict", "-Wnull-dereference", "-Wjump-misses-init"
 #define C_FLAGS "-std=c18", DEBUG_FLAGS, WARNING_FLAGS
-#define BUILD_CMD "cc", C_FLAGS, CONCAT("-o ", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c")
+#define BUILD_CMD "cc", C_FLAGS, CONCAT("-o", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
