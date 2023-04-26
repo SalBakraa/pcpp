@@ -23,13 +23,14 @@
 
 #define WARNING_FLAGS "-Wall", "-Wextra", "-Wshadow", "-Wconversion", "-Wduplicated-cond", "-Wduplicated-branches", "-Wrestrict", "-Wnull-dereference", "-Wjump-misses-init"
 #define C_FLAGS "-std=c18", DEBUG_FLAGS, WARNING_FLAGS
+#define BUILD_CMD "cc", C_FLAGS, CONCAT("-o ", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // LSP stuff
 static void create_ccls_file(const char *binary_path) {
 	if (is_path1_modified_after_path2(binary_path, ".ccls")){
-		CHAIN(CHAIN_CMD("echo", JOIN("\n", "clang", C_FLAGS)), CHAIN_OUT(PATH(SRC_DIR, ".ccls")));
+		CHAIN(CHAIN_CMD("echo", JOIN("\n", "clang", BUILD_CMD)), CHAIN_OUT(PATH(SRC_DIR, ".ccls")));
 	}
 }
 
@@ -43,27 +44,7 @@ static void build(void) {
 		MKDIRS(BUILD_DIR);
 	}
 
-	Cmd bin_cmd = {
-		.line = cstr_array_make("cc", C_FLAGS, "-o", PATH(BUILD_DIR, _BINARY_NAME), NULL),
-	};
-	FOREACH_FILE_IN_DIR(file, SRC_DIR, {
-		if (!ENDS_WITH(file, ".c")) {
-			continue;
-		}
-
-		// Only rebuild the source file if it's source was modified
-		Cstr infile = PATH(SRC_DIR, file);
-		Cstr outfile = PATH(BUILD_DIR, CONCAT(NOEXT(file), ".o"));
-		bin_cmd.line = cstr_array_append(bin_cmd.line, strdup(outfile));
-		if (!is_path1_modified_after_path2(infile, outfile)) {
-			continue;
-		}
-
-		CMD("cc", C_FLAGS, "-o", outfile, "-c", infile);
-	});
-
-	INFO("CMD: %s", cmd_show(bin_cmd));
-	cmd_run_sync(bin_cmd);
+	CMD(BUILD_CMD);
 }
 
 int main(int argc, char **argv)
