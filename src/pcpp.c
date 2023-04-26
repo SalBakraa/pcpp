@@ -115,11 +115,12 @@ int main(int argc, char **argv) {
 	size_t f_size = (size_t) filesize.QuadPart;
 #endif
 
-	char *buffer = malloc(f_size);
+	char *buffer = malloc(f_size + 1);
 	if (buffer == NULL) {
 		PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
 	}
 
+	buffer[f_size] = '\0';
 	size_t read_count = fd_read(f, buffer, f_size);
 	if (read_count < f_size) {
 		PANIC("Could not read full file into memory");
