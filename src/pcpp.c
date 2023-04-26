@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "lexer.h"
+#include "lexer.c"
 
 bool parse_new_line(const char *input, size_t in_len, size_t *index) {
 	int state = 0;

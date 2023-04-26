@@ -1,5 +1,5 @@
 %option 8bit
-%option outfile="src/lexer.c" header-file="src/lexer.h" prefix="lexer_"
+%option outfile="src/lexer.c" prefix="lexer_"
 %option noyywrap
 
 %top{
@@ -180,4 +180,160 @@ UNICODE_ESCAPE \\(u[[:digit:]]{4}|U[[:digit:]]{6})
 .                                                                   { return OTHER; }
 
 %%
+#undef YY_NEW_FILE
+#undef YY_FLUSH_BUFFER
+#undef yy_set_bol
+#undef yy_new_buffer
+#undef yy_set_interactive
+#undef YY_DO_BEFORE_ACTION
+
+#ifdef YY_DECL_IS_OURS
+#undef YY_DECL_IS_OURS
+#undef YY_DECL
+#endif
+
+#ifndef lexer__create_buffer_ALREADY_DEFINED
+#undef yy_create_buffer
+#endif
+#ifndef lexer__delete_buffer_ALREADY_DEFINED
+#undef yy_delete_buffer
+#endif
+#ifndef lexer__scan_buffer_ALREADY_DEFINED
+#undef yy_scan_buffer
+#endif
+#ifndef lexer__scan_string_ALREADY_DEFINED
+#undef yy_scan_string
+#endif
+#ifndef lexer__scan_bytes_ALREADY_DEFINED
+#undef yy_scan_bytes
+#endif
+#ifndef lexer__init_buffer_ALREADY_DEFINED
+#undef yy_init_buffer
+#endif
+#ifndef lexer__flush_buffer_ALREADY_DEFINED
+#undef yy_flush_buffer
+#endif
+#ifndef lexer__load_buffer_state_ALREADY_DEFINED
+#undef yy_load_buffer_state
+#endif
+#ifndef lexer__switch_to_buffer_ALREADY_DEFINED
+#undef yy_switch_to_buffer
+#endif
+#ifndef lexer_push_buffer_state_ALREADY_DEFINED
+#undef yypush_buffer_state
+#endif
+#ifndef lexer_pop_buffer_state_ALREADY_DEFINED
+#undef yypop_buffer_state
+#endif
+#ifndef lexer_ensure_buffer_stack_ALREADY_DEFINED
+#undef yyensure_buffer_stack
+#endif
+#ifndef lexer_lex_ALREADY_DEFINED
+#undef yylex
+#endif
+#ifndef lexer_restart_ALREADY_DEFINED
+#undef yyrestart
+#endif
+#ifndef lexer_lex_init_ALREADY_DEFINED
+#undef yylex_init
+#endif
+#ifndef lexer_lex_init_extra_ALREADY_DEFINED
+#undef yylex_init_extra
+#endif
+#ifndef lexer_lex_destroy_ALREADY_DEFINED
+#undef yylex_destroy
+#endif
+#ifndef lexer_get_debug_ALREADY_DEFINED
+#undef yyget_debug
+#endif
+#ifndef lexer_set_debug_ALREADY_DEFINED
+#undef yyset_debug
+#endif
+#ifndef lexer_get_extra_ALREADY_DEFINED
+#undef yyget_extra
+#endif
+#ifndef lexer_set_extra_ALREADY_DEFINED
+#undef yyset_extra
+#endif
+#ifndef lexer_get_in_ALREADY_DEFINED
+#undef yyget_in
+#endif
+#ifndef lexer_set_in_ALREADY_DEFINED
+#undef yyset_in
+#endif
+#ifndef lexer_get_out_ALREADY_DEFINED
+#undef yyget_out
+#endif
+#ifndef lexer_set_out_ALREADY_DEFINED
+#undef yyset_out
+#endif
+#ifndef lexer_get_leng_ALREADY_DEFINED
+#undef yyget_leng
+#endif
+#ifndef lexer_get_text_ALREADY_DEFINED
+#undef yyget_text
+#endif
+#ifndef lexer_get_lineno_ALREADY_DEFINED
+#undef yyget_lineno
+#endif
+#ifndef lexer_set_lineno_ALREADY_DEFINED
+#undef yyset_lineno
+#endif
+#ifndef lexer_get_column_ALREADY_DEFINED
+#undef yyget_column
+#endif
+#ifndef lexer_set_column_ALREADY_DEFINED
+#undef yyset_column
+#endif
+#ifndef lexer_wrap_ALREADY_DEFINED
+#undef yywrap
+#endif
+#ifndef lexer_get_lval_ALREADY_DEFINED
+#undef yyget_lval
+#endif
+#ifndef lexer_set_lval_ALREADY_DEFINED
+#undef yyset_lval
+#endif
+#ifndef lexer_get_lloc_ALREADY_DEFINED
+#undef yyget_lloc
+#endif
+#ifndef lexer_set_lloc_ALREADY_DEFINED
+#undef yyset_lloc
+#endif
+#ifndef lexer_alloc_ALREADY_DEFINED
+#undef yyalloc
+#endif
+#ifndef lexer_realloc_ALREADY_DEFINED
+#undef yyrealloc
+#endif
+#ifndef lexer_free_ALREADY_DEFINED
+#undef yyfree
+#endif
+#ifndef lexer_text_ALREADY_DEFINED
+#undef yytext
+#endif
+#ifndef lexer_leng_ALREADY_DEFINED
+#undef yyleng
+#endif
+#ifndef lexer_in_ALREADY_DEFINED
+#undef yyin
+#endif
+#ifndef lexer_out_ALREADY_DEFINED
+#undef yyout
+#endif
+#ifndef lexer__flex_debug_ALREADY_DEFINED
+#undef yy_flex_debug
+#endif
+#ifndef lexer_lineno_ALREADY_DEFINED
+#undef yylineno
+#endif
+#ifndef lexer_tables_fload_ALREADY_DEFINED
+#undef yytables_fload
+#endif
+#ifndef lexer_tables_destroy_ALREADY_DEFINED
+#undef yytables_destroy
+#endif
+#ifndef lexer_TABLES_NAME_ALREADY_DEFINED
+#undef yyTABLES_NAME
+#endif
 WARNING_ENABLE
