@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "lexer.c"
+#include "macro.c"
 
 bool parse_new_line(const char *input, size_t in_len, size_t *index) {
 	int state = 0;
@@ -87,6 +88,19 @@ Cstr_Array cstr_split_newline(Cstr cstr)
 	return ret;
 }
 
+typedef enum PCPP_STATE {
+	PCPP_INITIAL,
+	PCPP_DIRECTIVE,
+
+	PCPP_DIRECTIVE_UNDEF,
+	PCPP_DIRECTIVE_UNDEF_IDENTIFIER,
+
+	PCPP_DIRECTIVE_DEF,
+	PCPP_DIRECTIVE_DEF_IDENTIFIER,
+	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS,
+	PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT,
+} PCPP_STATE ;
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		PANIC("No argument was specified.");
@@ -156,17 +170,145 @@ int main(int argc, char **argv) {
 		free((char *)next_line);
 	}
 
+	macro_table *symbol_table = macro_table_make();
 	for (size_t i = 0; i < lines.count; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		INFO("Line %zu: %s", i, lines.elems[i]);
+
+		PCPP_STATE state = PCPP_INITIAL;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
 			if (tok == DONE) {
 				break;
 			}
-			INFO("\tTOKEN: %s", C_TOKENS_STRING[tok]);
-		}
 
+			switch (state) {
+				case PCPP_INITIAL:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case HASH:
+							state = PCPP_DIRECTIVE;
+							break;
+						default:
+							TODO_SAFE("Deal with parsing C code: '%d' -> '%s'.", state, C_TOKENS_STRING[tok]);
+					}
+					break;
+				case PCPP_DIRECTIVE:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER:
+							if (strcmp(lexer_text, "pragma") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "include") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "define") == 0) {
+								state = PCPP_DIRECTIVE_DEF;
+							} else if (strcmp(lexer_text, "undef") == 0) {
+								state = PCPP_DIRECTIVE_UNDEF;
+							} else if (strcmp(lexer_text, "if") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "elif") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "ifdef") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "elifdef") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "ifndef") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "elifndef") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "else") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "endif") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "warning") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							} else if (strcmp(lexer_text, "error") == 0) {
+								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
+							}
+							break;
+						default:
+							TODO_SAFE("Deal with parse error in state '%d' -> '%s'.", state, C_TOKENS_STRING[tok]);
+					}
+					break;
+
+				/* UNDEFINE */
+				case PCPP_DIRECTIVE_UNDEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER:
+							macro_table_remove(symbol_table, lexer_text);
+							state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
+							break;
+						default:
+							PANIC("Undefine directive must be be followed by an identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_UNDEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Undefine directive must only be followed by a single token: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/* DEFINE */
+				case PCPP_DIRECTIVE_DEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER:
+							macro_table_push(symbol_table, lexer_text);
+							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
+							break;
+						default:
+							PANIC("Define directive must be be followed by an identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_DEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+							break;
+						case WHITESPACE:
+							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+							break;
+						case L_PAREN:
+							macro_table_peek(symbol_table)->takes_args = true;
+							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
+							break;
+						default:
+							break;
+					}
+					break;
+				case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS:
+					switch (tok) {
+						case COMMA:
+						case COMMENT:
+						case WHITESPACE:
+							TODO_SAFE("Verify that each argument is delimited only by comma.");
+							break;
+						case R_PAREN:
+							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+							break;
+						default:
+							macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+							break;
+					}
+					break;
+				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
+					macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
+					break;
+			}
+		}
 		lexer__delete_buffer(line_buf);
 	}
 }
