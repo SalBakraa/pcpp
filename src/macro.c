@@ -45,11 +45,11 @@ void macro_definition_push_args(macro_definition *def, Cstr token) {
 	if (!def->takes_args) {
 		PANIC("Macro definition '%s' does not take args.", def->identifier);
 	}
-	cstr_array_append(def->replacement, token);
+	def->args = cstr_array_append(def->args, token);
 }
 
 void macro_definition_push_replacement(macro_definition *def, Cstr token) {
-	cstr_array_append(def->replacement, token);
+	def->replacement = cstr_array_append(def->replacement, token);
 }
 
 // Define the symbol table structure
