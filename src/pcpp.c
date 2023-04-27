@@ -242,10 +242,16 @@ int main(int argc, char **argv) {
 						case COMMENT:
 						case WHITESPACE:
 							break;
-						case IDENTIFIER:
-							macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+						case IDENTIFIER: {
+							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							if (def == NULL) {
+								macro_table_push(symbol_table, lexer_text);
+								def = macro_table_peek(symbol_table);
+							}
+							def->status = MACRO_UNDEFINED;
 							state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 							break;
+						}
 						default:
 							PANIC("Undefine directive must be be followed by an identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
