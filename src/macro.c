@@ -84,25 +84,25 @@ macro_definition *macro_table_peek(macro_table *table) {
 }
 
 // Add a symbol to the table
-void macro_table_push(macro_table *table, Cstr identifier) {
+macro_definition *macro_table_push(macro_table *table, Cstr identifier) {
 	size_t macro_len = strlen(identifier);
 	// Check if the symbol already exists
 	for (size_t i = 0; i < table->count; ++i) {
 		size_t table_macro_len = strlen(table->macros[i]->identifier);
 		if (macro_len == table_macro_len && strcmp(identifier, table->macros[i]->identifier) == 0) {
 			// Move the macro to end of the array so that it can be peeked
-			macro_definition *def = table->macros[i];
+			macro_definition *macro = table->macros[i];
 			// Reset the macro definition
-			def->takes_args = false;
-			def->args = cstr_array_make(NULL);
-			def->replacement = cstr_array_make(NULL);
+			macro->takes_args = false;
+			macro->args = cstr_array_make(NULL);
+			macro->replacement = cstr_array_make(NULL);
 
 			for (size_t j = i; j < table->count - 1; ++j) {
 				table->macros[j] = table->macros[j+1];
 			}
-			table->macros[table->count-1] = def;
+			table->macros[table->count-1] = macro;
 
-			return; // Symbol already exists
+			return macro; // Symbol already exists
 		}
 	}
 
@@ -118,6 +118,7 @@ void macro_table_push(macro_table *table, Cstr identifier) {
 	}
 
 	table->macros[table->count++] = macro;
+	return macro;
 }
 
 // Add a symbol to the table
