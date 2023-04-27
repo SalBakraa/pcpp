@@ -113,6 +113,8 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_ELIFNDEF,
 	PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER,
 
+	PCPP_DIRECTIVE_ELSE,
+
 	PCPP_DIRECTIVE_ENDIF,
 } PCPP_STATE ;
 
@@ -240,6 +242,12 @@ int main(int argc, char **argv) {
 								state = PCPP_DIRECTIVE_ELIFDEF;
 							} else if (strcmp(lexer_text, "elifndef") == 0) {
 								state = PCPP_DIRECTIVE_ELIFNDEF;
+							} else if (strcmp(lexer_text, "else") == 0) {
+								state = PCPP_DIRECTIVE_ELSE;
+								if (!curr_scope->conditional_is_undetermined && !curr_scope->conditional_was_resolved) {
+									curr_scope->should_process = true;
+									curr_scope->should_output = true;
+								}
 							} else if (strcmp(lexer_text, "endif") == 0) {
 								scope_stack_pop(scopes);
 								state = PCPP_DIRECTIVE_ENDIF;
@@ -418,7 +426,14 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (curr_scope->conditional_is_undetermined || curr_scope->conditional_was_resolved) {
+							if (curr_scope->conditional_is_undetermined) {
+								state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
+								break;
+							}
+
+							if (curr_scope->conditional_was_resolved) {
+								curr_scope->should_process = false;
+								curr_scope->should_output = false;
 								state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
 								break;
 							}
@@ -457,7 +472,14 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (curr_scope->conditional_is_undetermined || curr_scope->conditional_was_resolved) {
+							if (curr_scope->conditional_is_undetermined) {
+								state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
+								break;
+							}
+
+							if (curr_scope->conditional_was_resolved) {
+								curr_scope->should_process = false;
+								curr_scope->should_output = false;
 								state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 								break;
 							}
@@ -484,6 +506,19 @@ int main(int argc, char **argv) {
 							break;
 						default:
 							PANIC("Extra token at end of `elifndef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* ELSE */
+				case PCPP_DIRECTIVE_ELSE:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `else` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
 
