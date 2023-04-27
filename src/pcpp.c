@@ -204,33 +204,11 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (strcmp(lexer_text, "pragma") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "include") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "define") == 0) {
+							if (strcmp(lexer_text, "define") == 0) {
 								state = PCPP_DIRECTIVE_DEF;
 							} else if (strcmp(lexer_text, "undef") == 0) {
 								state = PCPP_DIRECTIVE_UNDEF;
-							} else if (strcmp(lexer_text, "if") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "elif") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "ifdef") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "elifdef") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "ifndef") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "elifndef") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "else") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "endif") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "warning") == 0) {
-								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
-							} else if (strcmp(lexer_text, "error") == 0) {
+							} else {
 								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
 							}
 							break;
