@@ -109,7 +109,7 @@ void macro_table_push(macro_table *table, Cstr identifier) {
 	macro_definition *macro = macro_definitione_make();
 	macro_definition_set_identifier(macro, identifier);
 
-	if (table->count == table->capacity) {
+	if (table->capacity == 0) {
 		table->macros = realloc(table->macros, sizeof *table->macros * (table->count + 5));
 		if (table->macros == NULL) {
 			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
