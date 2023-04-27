@@ -3,9 +3,16 @@
 
 #include <stdbool.h>
 
+typedef enum {
+	MACRO_UNDETERMINED,
+	MACRO_DEFINED,
+	MACRO_UNDEFINED,
+} macro_status;
+
 // Define the symbol table entry structure
 typedef struct {
 	Cstr identifier;
+	macro_status status;
 	bool takes_args;
 	Cstr_Array args;
 	Cstr_Array replacement;
@@ -18,6 +25,7 @@ macro_definition *macro_definitione_make() {
 	}
 
 	memset(def, 0, sizeof *def);
+	def->status = MACRO_UNDETERMINED;
 	def->takes_args = false;
 	def->args = cstr_array_make(NULL);
 	def->replacement = cstr_array_make(NULL);

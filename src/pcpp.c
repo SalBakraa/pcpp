@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							macro_table_remove(symbol_table, lexer_text);
+							macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
 							state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 							break;
 						default:
@@ -268,6 +268,7 @@ int main(int argc, char **argv) {
 							break;
 						case IDENTIFIER:
 							macro_table_push(symbol_table, lexer_text);
+							macro_table_peek(symbol_table)->status = MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 							break;
 						default:
