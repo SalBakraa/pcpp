@@ -195,6 +195,9 @@ int main(int argc, char **argv) {
 							TODO_SAFE("Deal with parsing C code: '%d' -> '%s'.", state, C_TOKENS_STRING[tok]);
 					}
 					break;
+
+				/*****************************************************************************************************************/
+
 				case PCPP_DIRECTIVE:
 					switch (tok) {
 						case COMMENT:
@@ -236,6 +239,8 @@ int main(int argc, char **argv) {
 					}
 					break;
 
+				/*****************************************************************************************************************/
+
 				/* UNDEFINE */
 				case PCPP_DIRECTIVE_UNDEF:
 					switch (tok) {
@@ -265,6 +270,8 @@ int main(int argc, char **argv) {
 							PANIC("Undefine directive must only be followed by a single token: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
+
+				/*****************************************************************************************************************/
 
 				/* DEFINE */
 				case PCPP_DIRECTIVE_DEF:
@@ -314,6 +321,8 @@ int main(int argc, char **argv) {
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
 					macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
 					break;
+
+				/*****************************************************************************************************************/
 			}
 		}
 		lexer__delete_buffer(line_buf);
