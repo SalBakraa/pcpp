@@ -5,6 +5,7 @@
 
 #include "lexer.c"
 #include "macro.c"
+#include "conditional.c"
 
 bool parse_new_line(const char *input, size_t in_len, size_t *index) {
 	int state = 0;
@@ -99,6 +100,20 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_DEF_IDENTIFIER,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT,
+
+	PCPP_DIRECTIVE_IFDEF,
+	PCPP_DIRECTIVE_IFDEF_IDENTIFIER,
+
+	PCPP_DIRECTIVE_IFNDEF,
+	PCPP_DIRECTIVE_IFNDEF_IDENTIFIER,
+
+	PCPP_DIRECTIVE_ELIFDEF,
+	PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER,
+
+	PCPP_DIRECTIVE_ELIFNDEF,
+	PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER,
+
+	PCPP_DIRECTIVE_ENDIF,
 } PCPP_STATE ;
 
 int main(int argc, char **argv) {
@@ -171,6 +186,7 @@ int main(int argc, char **argv) {
 	}
 
 	macro_table *symbol_table = macro_table_make();
+	scope_stack *scopes = scope_stack_make();
 	for (size_t i = 0; i < lines.count; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		INFO("Line %zu: %s", i, lines.elems[i]);
@@ -208,6 +224,24 @@ int main(int argc, char **argv) {
 								state = PCPP_DIRECTIVE_DEF;
 							} else if (strcmp(lexer_text, "undef") == 0) {
 								state = PCPP_DIRECTIVE_UNDEF;
+							} else if (strcmp(lexer_text, "if") == 0) {
+								// Copy parent scopes values
+								scope_item *parent = scope_stack_peek(scopes);
+								scope_item *top = scope_stack_push(scopes);
+								top->should_process = parent->should_process;
+								top->should_output = parent->should_output;
+								TODO_SAFE("Actually process expressions passed to `#if`");
+							} else if (strcmp(lexer_text, "ifdef") == 0) {
+								state = PCPP_DIRECTIVE_IFDEF;
+							} else if (strcmp(lexer_text, "ifndef") == 0) {
+								state = PCPP_DIRECTIVE_IFNDEF;
+							} else if (strcmp(lexer_text, "elifdef") == 0) {
+								state = PCPP_DIRECTIVE_ELIFDEF;
+							} else if (strcmp(lexer_text, "elifndef") == 0) {
+								state = PCPP_DIRECTIVE_ELIFNDEF;
+							} else if (strcmp(lexer_text, "endif") == 0) {
+								scope_stack_pop(scopes);
+								state = PCPP_DIRECTIVE_ENDIF;
 							} else {
 								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
 							}
@@ -299,6 +333,137 @@ int main(int argc, char **argv) {
 					break;
 
 				/*****************************************************************************************************************/
+
+				/* IFDEF */
+				case PCPP_DIRECTIVE_IFDEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER: {
+							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							scope_item *top = scope_stack_push(scopes);
+							top->should_process = def->status == MACRO_DEFINED;
+							top->should_output = def->status == MACRO_DEFINED;
+							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							break;
+						}
+						default:
+							PANIC("Directive `ifdef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_IFDEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* IFDEF */
+				case PCPP_DIRECTIVE_IFNDEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER: {
+							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							scope_item *top = scope_stack_push(scopes);
+							top->should_process = def->status != MACRO_DEFINED;
+							top->should_output = def->status != MACRO_DEFINED;
+							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							break;
+						}
+						default:
+							PANIC("Directive `ifdef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_IFNDEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* ELIFDEF */
+				case PCPP_DIRECTIVE_ELIFDEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER: {
+							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							scope_item *top = scope_stack_peek(scopes);
+							top->should_process = def->status == MACRO_DEFINED;
+							top->should_output = def->status == MACRO_DEFINED;
+							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							break;
+						}
+						default:
+							PANIC("Directive `elifdef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `elifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* ELIFNDEF */
+				case PCPP_DIRECTIVE_ELIFNDEF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER: {
+							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							scope_item *top = scope_stack_peek(scopes);
+							top->should_process = def->status != MACRO_DEFINED;
+							top->should_output = def->status != MACRO_DEFINED;
+							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							break;
+						}
+						default:
+							PANIC("Directive `elifndef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `elifndef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* ENDIF */
+				case PCPP_DIRECTIVE_ENDIF:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `endif` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
 			}
 		}
 		lexer__delete_buffer(line_buf);
