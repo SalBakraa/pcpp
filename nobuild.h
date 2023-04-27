@@ -879,7 +879,7 @@ size_t fd_read(Fd fd, void *buf, size_t count)
 size_t fd_write(Fd fd, void *buf, size_t count)
 {
 #ifndef _WIN32
-    ssize_t bytes = read(fd, buf, (size_t) count);
+    ssize_t bytes = write(fd, buf, (size_t) count);
     if (bytes == -1) {
         ERRO("Write error: %s", strerror(errno));
         return 0;
@@ -919,7 +919,7 @@ int fd_printf(Fd fd, Cstr fmt, ...) {
         return result;
     }
 
-    fd_write(fd, buffer, (unsigned long) result);
+    fd_write(fd, buffer, (size_t) result);
 
 #ifdef _WIN32
     free(buffer);
