@@ -150,5 +150,6 @@ macro_definition *macro_table_get_def(macro_table *table, char *identifier) {
 		}
 	}
 
-	return NULL;
+	// If macro is not found, then add it
+	return macro_table_push(table, identifier); // Assumed status == MACRO_UNDETERMINED
 }
