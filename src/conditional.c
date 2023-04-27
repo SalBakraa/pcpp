@@ -4,6 +4,8 @@
 #include <stdbool.h>
 
 typedef struct {
+	bool conditional_is_undetermined;
+	bool conditional_was_resolved;
 	bool should_process;
 	bool should_output;
 } scope_item;

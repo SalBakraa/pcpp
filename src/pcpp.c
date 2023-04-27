@@ -191,6 +191,7 @@ int main(int argc, char **argv) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		INFO("Line %zu: %s", i, lines.elems[i]);
 
+		scope_item *curr_scope = scope_stack_peek(scopes);
 		PCPP_STATE state = PCPP_INITIAL;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
@@ -226,10 +227,10 @@ int main(int argc, char **argv) {
 								state = PCPP_DIRECTIVE_UNDEF;
 							} else if (strcmp(lexer_text, "if") == 0) {
 								// Copy parent scopes values
-								scope_item *parent = scope_stack_peek(scopes);
 								scope_item *top = scope_stack_push(scopes);
-								top->should_process = parent->should_process;
-								top->should_output = parent->should_output;
+								top->conditional_is_undetermined = true;
+								top->should_process = curr_scope->should_process;
+								top->should_output = curr_scope->should_output;
 								TODO_SAFE("Actually process expressions passed to `#if`");
 							} else if (strcmp(lexer_text, "ifdef") == 0) {
 								state = PCPP_DIRECTIVE_IFDEF;
@@ -343,6 +344,14 @@ int main(int argc, char **argv) {
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
+							if (def->status == MACRO_UNDETERMINED) {
+								top->conditional_is_undetermined = true;
+								top->should_process = curr_scope->should_process;
+								top->should_output = curr_scope->should_process;
+								break;
+							}
+
+							top->conditional_was_resolved = def->status == MACRO_DEFINED;
 							top->should_process = def->status == MACRO_DEFINED;
 							top->should_output = def->status == MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
@@ -373,9 +382,17 @@ int main(int argc, char **argv) {
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
-							top->should_process = def->status != MACRO_DEFINED;
-							top->should_output = def->status != MACRO_DEFINED;
-							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							if (def->status == MACRO_UNDETERMINED) {
+								top->conditional_is_undetermined = true;
+								top->should_process = curr_scope->should_process;
+								top->should_output = curr_scope->should_process;
+								break;
+							}
+
+							top->conditional_was_resolved = def->status == MACRO_UNDEFINED;
+							top->should_process = def->status == MACRO_UNDEFINED;
+							top->should_output = def->status == MACRO_UNDEFINED;
+							state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 							break;
 						}
 						default:
@@ -400,14 +417,23 @@ int main(int argc, char **argv) {
 						case COMMENT:
 						case WHITESPACE:
 							break;
-						case IDENTIFIER: {
+						case IDENTIFIER:
+							if (curr_scope->conditional_is_undetermined || curr_scope->conditional_was_resolved) {
+								state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
+								break;
+							}
+
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							scope_item *top = scope_stack_peek(scopes);
-							top->should_process = def->status == MACRO_DEFINED;
-							top->should_output = def->status == MACRO_DEFINED;
-							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							if (def->status == MACRO_UNDETERMINED) {
+								PANIC("Macros used in `elifdef` must me explcitly defined/undefined: %s", lexer_text);
+								break;
+							}
+
+							curr_scope->conditional_was_resolved = def->status == MACRO_DEFINED;
+							curr_scope->should_process = def->status == MACRO_DEFINED;
+							curr_scope->should_output = def->status == MACRO_DEFINED;
+							state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
 							break;
-						}
 						default:
 							PANIC("Directive `elifdef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -430,14 +456,23 @@ int main(int argc, char **argv) {
 						case COMMENT:
 						case WHITESPACE:
 							break;
-						case IDENTIFIER: {
+						case IDENTIFIER:
+							if (curr_scope->conditional_is_undetermined || curr_scope->conditional_was_resolved) {
+								state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
+								break;
+							}
+
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							scope_item *top = scope_stack_peek(scopes);
-							top->should_process = def->status != MACRO_DEFINED;
-							top->should_output = def->status != MACRO_DEFINED;
-							state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+							if (def->status == MACRO_UNDETERMINED) {
+								PANIC("Macros used in `elifndef` must me explcitly defined/undefined: %s", lexer_text);
+								break;
+							}
+
+							curr_scope->conditional_was_resolved = def->status == MACRO_UNDEFINED;
+							curr_scope->should_process = def->status == MACRO_UNDEFINED;
+							curr_scope->should_output = def->status == MACRO_UNDEFINED;
+							state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 							break;
-						}
 						default:
 							PANIC("Directive `elifndef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
