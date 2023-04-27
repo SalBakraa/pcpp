@@ -92,6 +92,11 @@ void macro_table_push(macro_table *table, Cstr identifier) {
 		if (macro_len == table_macro_len && strcmp(identifier, table->macros[i]->identifier) == 0) {
 			// Move the macro to end of the array so that it can be peeked
 			macro_definition *def = table->macros[i];
+			// Reset the macro definition
+			def->takes_args = false;
+			def->args = cstr_array_make(NULL);
+			def->replacement = cstr_array_make(NULL);
+
 			for (size_t j = i; j < table->count - 1; ++j) {
 				table->macros[j] = table->macros[j+1];
 			}
