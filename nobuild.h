@@ -1527,6 +1527,42 @@ void path_rm(Cstr path)
     }
 }
 
+long long nobuild__get_modification_time(const char *path) {
+	if (IS_DIR(path)) {
+		long long mod_time = -1;
+		FOREACH_FILE_IN_DIR(file, path, {
+			if (strcmp(file, ".") == 0 || strcmp(file, "..") == 0) {
+				continue;
+			}
+
+			if (STARTS_WITH(file, ".ccls")) {
+				continue;
+			}
+
+			long long path_mod_time = nobuild__get_modification_time(PATH(path, file));
+			mod_time = path_mod_time > mod_time ? path_mod_time : mod_time;
+		});
+		return mod_time;
+	} else {
+#ifndef _WIN32
+		struct stat statbuf = {0};
+
+		if (stat(path, &statbuf) < 0) {
+			PANIC("Could not stat %s: %s\n", path, nobuild__strerror(errno));
+		}
+		return (long long) statbuf.st_mtime;
+#else
+		FILETIME path_time;
+		Fd path_fd = fd_open_for_read(path1);
+		if (!GetFileTime(path_fd, NULL, NULL, &path_time)) {
+			PANIC("could not get time of %s: %s", path, GetLastErrorAsString());
+		}
+		fd_close(path_fd);
+		return ((long long) path_time.dwHighDateTime) << 32 | path_time.dwLowDateTime;
+#endif
+	}
+}
+
 int is_path1_modified_after_path2(const char *path1, const char *path2)
 {
     // Warn the user that the path is missing
@@ -1539,37 +1575,7 @@ int is_path1_modified_after_path2(const char *path1, const char *path2)
         return 1;
     }
 
-#ifdef _WIN32
-    FILETIME path1_time, path2_time;
-
-    Fd path1_fd = fd_open_for_read(path1);
-    if (!GetFileTime(path1_fd, NULL, NULL, &path1_time)) {
-        PANIC("could not get time of %s: %s", path1, GetLastErrorAsString());
-    }
-    fd_close(path1_fd);
-
-    Fd path2_fd = fd_open_for_read(path2);
-    if (!GetFileTime(path2_fd, NULL, NULL, &path2_time)) {
-        PANIC("could not get time of %s: %s", path2, GetLastErrorAsString());
-    }
-    fd_close(path2_fd);
-
-    return CompareFileTime(&path1_time, &path2_time) == 1;
-#else
-    struct stat statbuf = {0};
-
-    if (stat(path1, &statbuf) < 0) {
-        PANIC("could not stat %s: %s\n", path1, nobuild__strerror(errno));
-    }
-    time_t path1_time = statbuf.st_mtime;
-
-    if (stat(path2, &statbuf) < 0) {
-        PANIC("could not stat %s: %s\n", path2, nobuild__strerror(errno));
-    }
-    time_t  path2_time = statbuf.st_mtime;
-
-    return path1_time > path2_time;
-#endif
+    return nobuild__get_modification_time(path1) > nobuild__get_modification_time(path2);
 }
 
 void nobuild__vlog(FILE *stream, Cstr tag, Cstr fmt, va_list args)

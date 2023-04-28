@@ -43,7 +43,9 @@ static void build(void) {
 		MKDIRS(BUILD_DIR);
 	}
 
-	CMD("cc", C_FLAGS, CONCAT("-o", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c"));
+	if (is_path1_modified_after_path2(SRC_DIR, PATH(BUILD_DIR, _BINARY_NAME))){
+		CMD("cc", C_FLAGS, CONCAT("-o", PATH(BUILD_DIR, _BINARY_NAME)), PATH(SRC_DIR, "pcpp.c"));
+	}
 }
 
 int main(int argc, char **argv)
