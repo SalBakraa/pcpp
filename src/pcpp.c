@@ -499,7 +499,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
-						case IDENTIFIER:
+						case IDENTIFIER: {
 							if (curr_scope->conditional_is_undetermined) {
 								state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
 								break;
@@ -524,6 +524,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							curr_scope->should_output = def->status == MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
 							break;
+						}
 						default:
 							PANIC("Directive `elifdef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -546,7 +547,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
-						case IDENTIFIER:
+						case IDENTIFIER: {
 							if (curr_scope->conditional_is_undetermined) {
 								state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 								break;
@@ -571,6 +572,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							curr_scope->should_output = def->status == MACRO_UNDEFINED;
 							state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 							break;
+						}
 						default:
 							PANIC("Directive `elifndef` followed by non-identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -622,13 +624,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case IDENTIFIER:
 							TODO_SAFE("Expand `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 							break;
-						case STRING_LITERAL:
+						case STRING_LITERAL: {
 							current_line_was_processed = true;
 
 							// trim quotes from around filename
 							size_t len = strlen(lexer_text) - 2;
 							if (len == 0) {
-								panic("Empty filename passed to `include` directive.");
+								PANIC("Empty filename passed to `include` directive.");
 							}
 
 							char *included_file = malloc(sizeof *included_file * (len + 1));
@@ -640,6 +642,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							strncpy(included_file, lexer_text + 1, len);
 							pre_process_file(included_file, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
+						}	/* fallthrough */
 						case HEADER_LITERAL:
 							state = PCPP_DIRECTIVE_INCLUDE_FILE;
 							break;
