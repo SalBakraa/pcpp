@@ -157,7 +157,20 @@ void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
     cstrs->capacity--;
 }
 
-void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
+	if (arr == NULL) {
+		return false;
+	}
+
+	for (size_t i = 0; i < arr->count; ++i) {
+		if (strcmp(val, arr->elems[i]) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
 	}
@@ -341,11 +354,12 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !cstr_array_contains(allowed_identifiers, lexer_text)) {
+								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
-							current_line_was_processed = true;
 
+							current_line_was_processed = true;
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							if (def == NULL) {
 								def = macro_table_push(symbol_table, lexer_text);
@@ -377,9 +391,11 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !cstr_array_contains(allowed_identifiers, lexer_text)) {
+								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
+
 							current_line_was_processed = true;
 							macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
@@ -433,14 +449,16 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
-							if (def->status == MACRO_UNDETERMINED) {
+							if (!cstr_array_contains(allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
 							}
 
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
 							}
 							current_line_was_processed = true;
@@ -476,14 +494,16 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
-							if (def->status == MACRO_UNDETERMINED) {
+							if (!cstr_array_contains(allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 								break;
 							}
 
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 								break;
 							}
 
@@ -644,6 +664,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							break;
 						case STRING_LITERAL: {
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_INCLUDE_FILE;
 								break;
 							}
 							current_line_was_processed = true;
@@ -661,7 +682,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 							included_file[len] = '\0';
 							strncpy(included_file, lexer_text + 1, len);
-							pre_process_file(included_file, symbol_table, scopes, depth + 1);
+							pre_process_file(included_file, allowed_identifiers, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
 						}	/* fallthrough */
 						case HEADER_LITERAL:
@@ -697,11 +718,46 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		PANIC("No argument was specified.");
+		PANIC("No arguments were specified.");
+	}
+
+	Cstr *filename = NULL;
+
+	// List of identifers allowed to be expanded and defined/undefined
+	Cstr_Array allowed_identifiers = cstr_array_make(NULL);
+
+	for (int i = 1; i < argc; ++i) {
+		if (STARTS_WITH(argv[i], "--only-process")) {
+			Cstr id_list = STARTS_WITH(argv[i], "--only-process=") ? argv[i] + strlen("--only-process=") : argv[++i];
+			allowed_identifiers = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (filename != NULL) {
+			PANIC("Input file has already been specified: '%s' replaces '%s'", argv[i], *filename);
+		}
+
+		filename = (Cstr *) &argv[i];
+	}
+
+	if (filename == NULL) {
+		PANIC("Input file has not been specified.");
+	}
+
+	// Simply output the file if no identifers are allowed to used
+	if (allowed_identifiers.count == 0) {
+		char buf[4096];
+		Fd fd = fd_open_for_read(*filename);
+		size_t read_bytes = 0;
+		while ((read_bytes = fd_read(fd, buf, 4096)) != 0) {
+			fd_write(fd_stdout, buf, read_bytes);
+		}
+		fd_close(fd);
+		return 0;
 	}
 
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(argv[1], macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, &allowed_identifiers, macro_table_make(), scope_stack_make(), 0);
 }
