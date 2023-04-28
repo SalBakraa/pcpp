@@ -226,8 +226,6 @@ int main(int argc, char **argv) {
 	scope_stack *scopes = scope_stack_make();
 	for (size_t i = 0; i < lines.count; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
-		INFO("Line %zu: %s", i, lines.elems[i]);
-
 		scope_item *curr_scope = scope_stack_peek(scopes);
 
 		// Line that will be outputted
