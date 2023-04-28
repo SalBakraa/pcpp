@@ -56,5 +56,7 @@ int main(int argc, char **argv)
 
 	build();
 
+	CMD(PATH(BUILD_DIR, _BINARY_NAME), PATH("test", "hello.c"));
+
 	return 0;
 }
