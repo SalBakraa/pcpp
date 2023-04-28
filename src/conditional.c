@@ -50,9 +50,9 @@ scope_stack *scope_stack_make() {
 	return stack;
 }
 
-scope_item *scope_stack_peek(scope_stack *stack) {
-	if (stack->count == 0) {
-		return NULL;
+__attribute__((returns_nonnull)) scope_item *scope_stack_peek(scope_stack *stack) {
+	if (stack->count < 1) {
+		PANIC("Attempting to peek stack missing file scope.");
 	}
 
 	return stack->scopes[stack->count-1];
