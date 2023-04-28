@@ -1,6 +1,16 @@
 #define NOBUILD_IMPLEMENTATION
 #include "../nobuild.h"
 
+#ifndef _WIN32
+static Fd fd_stdin = STDIN_FILENO;
+static Fd fd_stdout = STDOUT_FILENO;
+static Fd fd_stderr = STDERR_FILENO;
+#else
+static Fd fd_stdin = GetStdHandle(STD_INPUT_HANDLE);
+static Fd fd_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+static Fd fd_stderr = GetStdHandle(STD_ERROR_HANDLE);
+#endif
+
 #include <stdbool.h>
 
 #include "lexer.c"
@@ -120,6 +130,29 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_ENDIF,
 } PCPP_STATE ;
 
+
+void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
+
+	size_t len = strlen(cstr);
+	char *temp = malloc(sizeof *temp * (len + 1));
+	if (temp == NULL) {
+		PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+	}
+
+	temp = memcpy(temp, cstr, len+1);
+
+    if (cstrs->capacity < 1) {
+        cstrs->elems = realloc(cstrs->elems, sizeof *cstrs->elems * (cstrs->count + 10));
+        cstrs->capacity += 10;
+        if (cstrs->elems == NULL) {
+            PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+        }
+    }
+
+    cstrs->elems[cstrs->count++] = temp;
+    cstrs->capacity--;
+}
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		PANIC("No argument was specified.");
@@ -196,6 +229,12 @@ int main(int argc, char **argv) {
 		INFO("Line %zu: %s", i, lines.elems[i]);
 
 		scope_item *curr_scope = scope_stack_peek(scopes);
+
+		// Line that will be outputted
+		Cstr_Array output_line = cstr_array_make(NULL);
+		bool append_current_token = true;
+		bool current_line_was_processed = false;
+
 		PCPP_STATE state = curr_scope->should_process ? PCPP_INITIAL : PCPP_NON_DIRECTIVE;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
@@ -233,10 +272,10 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (strcmp(lexer_text, "define") == 0) {
-								state = PCPP_DIRECTIVE_DEF;
-							} else if (strcmp(lexer_text, "undef") == 0) {
+							if (strcmp(lexer_text, "undef") == 0) {
 								state = PCPP_DIRECTIVE_UNDEF;
+							} else if (strcmp(lexer_text, "define") == 0) {
+								state = PCPP_DIRECTIVE_DEF;
 							} else if (strcmp(lexer_text, "if") == 0) {
 								// Copy parent scopes values
 								scope_item *top = scope_stack_push(scopes);
@@ -254,9 +293,12 @@ int main(int argc, char **argv) {
 								state = PCPP_DIRECTIVE_ELIFNDEF;
 							} else if (strcmp(lexer_text, "else") == 0) {
 								state = PCPP_DIRECTIVE_ELSE;
-								if (!curr_scope->conditional_is_undetermined && !curr_scope->conditional_was_resolved) {
-									curr_scope->should_process = true;
-									curr_scope->should_output = true;
+								if (!curr_scope->conditional_is_undetermined) {
+									current_line_was_processed = true;
+									if(!curr_scope->conditional_was_resolved) {
+										curr_scope->should_process = true;
+										curr_scope->should_output = true;
+									}
 								}
 							} else if (strcmp(lexer_text, "endif") == 0) {
 								scope_stack_pop(scopes);
@@ -279,6 +321,8 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
+							current_line_was_processed = true;
+
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							if (def == NULL) {
 								def = macro_table_push(symbol_table, lexer_text);
@@ -310,6 +354,7 @@ int main(int argc, char **argv) {
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
+							current_line_was_processed = true;
 							macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 							break;
@@ -369,6 +414,7 @@ int main(int argc, char **argv) {
 								break;
 							}
 
+							current_line_was_processed = true;
 							top->conditional_was_resolved = def->status == MACRO_DEFINED;
 							top->should_process = def->status == MACRO_DEFINED;
 							top->should_output = def->status == MACRO_DEFINED;
@@ -407,6 +453,7 @@ int main(int argc, char **argv) {
 								break;
 							}
 
+							current_line_was_processed = true;
 							top->conditional_was_resolved = def->status == MACRO_UNDEFINED;
 							top->should_process = def->status == MACRO_UNDEFINED;
 							top->should_output = def->status == MACRO_UNDEFINED;
@@ -441,6 +488,7 @@ int main(int argc, char **argv) {
 								break;
 							}
 
+							current_line_was_processed = true;
 							if (curr_scope->conditional_was_resolved) {
 								curr_scope->should_process = false;
 								curr_scope->should_output = false;
@@ -487,6 +535,7 @@ int main(int argc, char **argv) {
 								break;
 							}
 
+							current_line_was_processed = true;
 							if (curr_scope->conditional_was_resolved) {
 								curr_scope->should_process = false;
 								curr_scope->should_output = false;
@@ -545,6 +594,12 @@ int main(int argc, char **argv) {
 					}
 					break;
 			}
+			if (append_current_token) {
+				append_to_line(&output_line, lexer_text);
+			}
+		}
+		if (curr_scope->should_output && !current_line_was_processed) {
+			fd_printf(fd_stdout, "\x1b[31m%s\x1b[0m\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
 	}
