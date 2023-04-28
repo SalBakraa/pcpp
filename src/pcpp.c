@@ -91,6 +91,8 @@ Cstr_Array cstr_split_newline(Cstr cstr)
 
 typedef enum PCPP_STATE {
 	PCPP_INITIAL,
+	PCPP_NON_DIRECTIVE,
+
 	PCPP_DIRECTIVE,
 
 	PCPP_DIRECTIVE_UNDEF,
@@ -194,7 +196,7 @@ int main(int argc, char **argv) {
 		INFO("Line %zu: %s", i, lines.elems[i]);
 
 		scope_item *curr_scope = scope_stack_peek(scopes);
-		PCPP_STATE state = PCPP_INITIAL;
+		PCPP_STATE state = curr_scope->should_process ? PCPP_INITIAL : PCPP_NON_DIRECTIVE;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
 			if (tok == DONE) {
@@ -211,12 +213,20 @@ int main(int argc, char **argv) {
 							state = PCPP_DIRECTIVE;
 							break;
 						default:
-							TODO_SAFE("Deal with parsing C code: '%d' -> '%s'.", state, C_TOKENS_STRING[tok]);
+							state = PCPP_NON_DIRECTIVE;
+							TODO_SAFE("Deal with parsing C code: '%s'.", lines.elems[i]);
 					}
 					break;
 
 				/*****************************************************************************************************************/
 
+				/* Regular C code */
+				case PCPP_NON_DIRECTIVE:
+					break;
+
+				/*****************************************************************************************************************/
+
+				/* Directives */
 				case PCPP_DIRECTIVE:
 					switch (tok) {
 						case COMMENT:
