@@ -672,5 +672,8 @@ int main(int argc, char **argv) {
 		PANIC("No argument was specified.");
 	}
 
+	// Disable TODO and INFO messages.
+	logLevel = LOG_LEVELS_WARN;
+
 	pre_process_file(argv[1], macro_table_make(), scope_stack_make(), 0);
 }

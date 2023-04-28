@@ -384,6 +384,15 @@ void path_rm(Cstr path);
 
 NOBUILD__DEPRECATED(void VLOG(FILE *stream, Cstr tag, Cstr fmt, va_list args));
 
+typedef enum LogLevels {
+	LOG_LEVELS_TODO,
+	LOG_LEVELS_INFO,
+	LOG_LEVELS_WARN,
+	LOG_LEVELS_ERRO,
+} LogLevels;
+
+LogLevels logLevel = LOG_LEVELS_TODO;
+
 void info(Cstr fmt, ...) NOBUILD_PRINTF_FORMAT(1, 2);
 #define INFO(fmt, ...) info("%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
 
@@ -1593,6 +1602,10 @@ void VLOG(FILE *stream, Cstr tag, Cstr fmt, va_list args)
 
 void info(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_INFO) {
+        return;
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "INFO", fmt, args);
@@ -1601,6 +1614,10 @@ void info(Cstr fmt, ...)
 
 void warn(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_WARN) {
+        return;
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "WARN", fmt, args);
@@ -1609,6 +1626,10 @@ void warn(Cstr fmt, ...)
 
 void erro(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_ERRO) {
+        return;
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "ERRO", fmt, args);
@@ -1617,6 +1638,11 @@ void erro(Cstr fmt, ...)
 
 void panic(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_ERRO) {
+        fprintf(stderr, "Function call paniced. set logLevel to `LogLevels_ERRO` for more details.");
+        exit(1);
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "ERRO", fmt, args);
@@ -1626,6 +1652,11 @@ void panic(Cstr fmt, ...)
 
 void todo(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_TODO) {
+        fprintf(stderr, "Missing implementation error. set logLevel to `LogLevels_TODO` for more details.");
+        exit(1);
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "TODO", fmt, args);
@@ -1635,6 +1666,10 @@ void todo(Cstr fmt, ...)
 
 void todo_safe(Cstr fmt, ...)
 {
+    if (logLevel > LOG_LEVELS_TODO) {
+        return;
+    }
+
     va_list args;
     va_start(args, fmt);
     nobuild__vlog(stderr, "TODO", fmt, args);
