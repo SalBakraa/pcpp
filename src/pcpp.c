@@ -170,7 +170,7 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 	return false;
 }
 
-void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array *allowed_files, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
 	}
@@ -682,7 +682,13 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, macro_tabl
 
 							included_file[len] = '\0';
 							strncpy(included_file, lexer_text + 1, len);
-							pre_process_file(included_file, allowed_identifiers, symbol_table, scopes, depth + 1);
+							if (!cstr_array_contains(allowed_files, included_file)) {
+								current_line_was_processed = false;
+								state = PCPP_DIRECTIVE_INCLUDE_FILE;
+								break;
+							}
+
+							pre_process_file(included_file, allowed_identifiers, allowed_files, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
 						}	/* fallthrough */
 						case HEADER_LITERAL:
@@ -726,10 +732,19 @@ int main(int argc, char **argv) {
 	// List of identifers allowed to be expanded and defined/undefined
 	Cstr_Array allowed_identifiers = cstr_array_make(NULL);
 
+	// List of file names allowed to be expanded into the final output
+	Cstr_Array allowed_files = cstr_array_make(NULL);
+
 	for (int i = 1; i < argc; ++i) {
 		if (STARTS_WITH(argv[i], "--only-process")) {
 			Cstr id_list = STARTS_WITH(argv[i], "--only-process=") ? argv[i] + strlen("--only-process=") : argv[++i];
 			allowed_identifiers = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only-include")) {
+			Cstr file_list = STARTS_WITH(argv[i], "--only-include=") ? argv[i] + strlen("--only-include=") : argv[++i];
+			allowed_files = SPLIT(file_list, ",");
 			continue;
 		}
 
@@ -745,7 +760,7 @@ int main(int argc, char **argv) {
 	}
 
 	// Simply output the file if no identifers are allowed to used
-	if (allowed_identifiers.count == 0) {
+	if (allowed_identifiers.count == 0 && allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
@@ -759,5 +774,5 @@ int main(int argc, char **argv) {
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(*filename, &allowed_identifiers, macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, &allowed_identifiers, &allowed_files, macro_table_make(), scope_stack_make(), 0);
 }
