@@ -658,7 +658,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 			}
 		}
 		if (curr_scope->should_output && !current_line_was_processed) {
-			fd_printf(fd_stdout, "\x1b[31m%s\x1b[0m\n", cstr_array_join("", output_line));
+			fd_printf(fd_stdout, "%s\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
 	}
