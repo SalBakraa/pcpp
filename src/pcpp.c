@@ -11,6 +11,7 @@ static Fd fd_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 static Fd fd_stderr = GetStdHandle(STD_ERROR_HANDLE);
 #endif
 
+#include <limits.h>
 #include <stdbool.h>
 
 #include "lexer.c"
@@ -128,6 +129,9 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_ELSE,
 
 	PCPP_DIRECTIVE_ENDIF,
+
+	PCPP_DIRECTIVE_INCLUDE,
+	PCPP_DIRECTIVE_INCLUDE_FILE,
 } PCPP_STATE ;
 
 
@@ -153,12 +157,11 @@ void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
     cstrs->capacity--;
 }
 
-int main(int argc, char **argv) {
-	if (argc < 2) {
-		PANIC("No argument was specified.");
+void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+	if (depth > 200) {
+		return;
 	}
 
-	Cstr filename = argv[1];
 	Fd f = fd_open_for_read(filename);
 #ifndef _WIN32
 	struct stat st = {0};
@@ -191,6 +194,7 @@ int main(int argc, char **argv) {
 	if (read_count < f_size) {
 		PANIC("Could not read full file into memory");
 	}
+	fd_close(f);
 
 	// Replace all null bytes with whitespace excluding the terminating byte
 	for (size_t i = 0; i < read_count; ++i) {
@@ -199,6 +203,17 @@ int main(int argc, char **argv) {
 
 	Cstr_Array lines = cstr_split_newline(buffer);
 	free(buffer);
+
+	// Change directory to that of the current file
+	char cwd[PATH_MAX];
+	if (getcwd(cwd, sizeof(cwd)) == NULL) {
+		PANIC("Could not retrieve current working directory.");
+	}
+
+	Cstr filedir = path_dirname(filename);
+	if (chdir(filedir) < 0) {
+		PANIC("Could not change current directory to '%s': %s", filedir, nobuild__strerror(errno));
+	}
 
 	// Merge lines that end in '\'
 	for (size_t i = 0; i < lines.count;) {
@@ -222,8 +237,6 @@ int main(int argc, char **argv) {
 		free((char *)next_line);
 	}
 
-	macro_table *symbol_table = macro_table_make();
-	scope_stack *scopes = scope_stack_make();
 	for (size_t i = 0; i < lines.count; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		scope_item *curr_scope = scope_stack_peek(scopes);
@@ -301,6 +314,8 @@ int main(int argc, char **argv) {
 							} else if (strcmp(lexer_text, "endif") == 0) {
 								scope_stack_pop(scopes);
 								state = PCPP_DIRECTIVE_ENDIF;
+							} else if (strcmp(lexer_text, "include") == 0) {
+								state = PCPP_DIRECTIVE_INCLUDE;
 							} else {
 								TODO_SAFE("Process %s -> %d: %s", lexer_text, state, C_TOKENS_STRING[tok]);
 							}
@@ -591,6 +606,52 @@ int main(int argc, char **argv) {
 							PANIC("Extra token at end of `endif` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
+
+				/*****************************************************************************************************************/
+
+				/* INCLUDE */
+				case PCPP_DIRECTIVE_INCLUDE:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						case IDENTIFIER:
+							TODO_SAFE("Expand `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+							break;
+						case STRING_LITERAL:
+							current_line_was_processed = true;
+
+							// trim quotes from around filename
+							size_t len = strlen(lexer_text) - 2;
+							if (len == 0) {
+								panic("Empty filename passed to `include` directive.");
+							}
+
+							char *included_file = malloc(sizeof *included_file * (len + 1));
+							if (included_file == NULL) {
+								PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+							}
+
+							included_file[len] = '\0';
+							strncpy(included_file, lexer_text + 1, len);
+							pre_process_file(included_file, symbol_table, scopes, depth + 1);
+							lexer__switch_to_buffer(line_buf);
+						case HEADER_LITERAL:
+							state = PCPP_DIRECTIVE_INCLUDE_FILE;
+							break;
+						default:
+							PANIC("Illegal token at end of `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
+				case PCPP_DIRECTIVE_INCLUDE_FILE:
+					switch (tok) {
+						case COMMENT:
+						case WHITESPACE:
+							break;
+						default:
+							PANIC("Extra token at end of `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+					}
+					break;
 			}
 			if (append_current_token) {
 				append_to_line(&output_line, lexer_text);
@@ -601,4 +662,15 @@ int main(int argc, char **argv) {
 		}
 		lexer__delete_buffer(line_buf);
 	}
+	if (chdir(cwd) < 0) {
+		PANIC("Could not restore current directory to '%s': %s", cwd, nobuild__strerror(errno));
+	}
+}
+
+int main(int argc, char **argv) {
+	if (argc < 2) {
+		PANIC("No argument was specified.");
+	}
+
+	pre_process_file(argv[1], macro_table_make(), scope_stack_make(), 0);
 }
