@@ -435,9 +435,11 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case R_PAREN:
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
-						default:
+						case IDENTIFIER:
 							macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 							break;
+						default:
+							PANIC("Illegal token in place of argument: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
