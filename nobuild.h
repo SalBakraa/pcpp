@@ -690,7 +690,7 @@ Cstr_Array cstr_array_from_cstr(Cstr cstr, Cstr delim)
         // TODO: differentiate between delim == null and delim == "" and delim not found
         //       Split the string into an array of strings, where each string is a single character
 
-        return cstr_array_make(cstr);
+        return cstr_array_make(cstr, NULL);
     }
 
     Cstr_Array ret = { .count = substr_count };
