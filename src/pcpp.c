@@ -696,7 +696,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 							pre_process_file(included_file, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
-						}	/* fallthrough */
+							__attribute__ ((fallthrough));
+						}
 						case HEADER_LITERAL:
 							state = PCPP_DIRECTIVE_INCLUDE_FILE;
 							break;

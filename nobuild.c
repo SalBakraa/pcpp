@@ -21,7 +21,7 @@
 #	define DEBUG_FLAGS "-O3"
 #endif
 
-#define WARNING_FLAGS "-Wall", "-Wextra", "-Wshadow", "-Wconversion", "-Wduplicated-cond", "-Wduplicated-branches", "-Wrestrict", "-Wnull-dereference", "-Wjump-misses-init"
+#define WARNING_FLAGS "-Wall", "-Wextra", "-Wshadow", "-Wconversion", "-Wduplicated-cond", "-Wduplicated-branches", "-Wrestrict", "-Wnull-dereference", "-Wjump-misses-init", "-Wimplicit-fallthrough"
 #define C_FLAGS "-std=c18", DEBUG_FLAGS, WARNING_FLAGS
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
