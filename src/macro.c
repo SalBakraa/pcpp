@@ -135,8 +135,8 @@ void macro_table_remove(macro_table *table, Cstr identifier) {
 		for (size_t j = i; j < table->count - 1; ++j) {
 			table->macros[j] = table->macros[j+1];
 		}
-		table->capacity--;
-		table->count++;
+		table->capacity++;
+		table->count--;
 		return;
 	}
 }
