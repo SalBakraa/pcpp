@@ -312,6 +312,10 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 									}
 								}
 							} else if (strcmp(lexer_text, "endif") == 0) {
+								if (!curr_scope->conditional_is_undetermined && curr_scope->conditional_was_resolved) {
+									current_line_was_processed = true;
+								}
+
 								scope_stack_pop(scopes);
 								state = PCPP_DIRECTIVE_ENDIF;
 							} else if (strcmp(lexer_text, "include") == 0) {
