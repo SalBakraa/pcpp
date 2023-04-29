@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.1.1] - 2023-04-28
+
+### Fixed
+
+- Fix `endif` derictives being displayed if the conditional was resolved.
+
 ## [0.1.0] - 2023-04-28
 
 _The first release of PCPP_
