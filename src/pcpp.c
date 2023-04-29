@@ -170,7 +170,13 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 	return false;
 }
 
-void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array *allowed_files, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+// List of identifers allowed to be expanded and defined/undefined
+Cstr_Array allowed_identifiers = {0};
+
+// List of file names allowed to be expanded into the final output
+Cstr_Array allowed_files = {0};
+
+void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
 	}
@@ -354,7 +360,7 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process || !cstr_array_contains(allowed_identifiers, lexer_text)) {
+							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
 								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
@@ -391,7 +397,7 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process || !cstr_array_contains(allowed_identifiers, lexer_text)) {
+							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
@@ -449,7 +455,7 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
-							if (!cstr_array_contains(allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
+							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -494,7 +500,7 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array
 						case IDENTIFIER: {
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
-							if (!cstr_array_contains(allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
+							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -682,13 +688,13 @@ void pre_process_file(Cstr filename, Cstr_Array *allowed_identifiers, Cstr_Array
 
 							included_file[len] = '\0';
 							strncpy(included_file, lexer_text + 1, len);
-							if (!cstr_array_contains(allowed_files, included_file)) {
+							if (!cstr_array_contains(&allowed_files, included_file)) {
 								current_line_was_processed = false;
 								state = PCPP_DIRECTIVE_INCLUDE_FILE;
 								break;
 							}
 
-							pre_process_file(included_file, allowed_identifiers, allowed_files, symbol_table, scopes, depth + 1);
+							pre_process_file(included_file, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
 						}	/* fallthrough */
 						case HEADER_LITERAL:
@@ -728,13 +734,6 @@ int main(int argc, char **argv) {
 	}
 
 	Cstr *filename = NULL;
-
-	// List of identifers allowed to be expanded and defined/undefined
-	Cstr_Array allowed_identifiers = cstr_array_make(NULL);
-
-	// List of file names allowed to be expanded into the final output
-	Cstr_Array allowed_files = cstr_array_make(NULL);
-
 	for (int i = 1; i < argc; ++i) {
 		if (STARTS_WITH(argv[i], "--only-process")) {
 			Cstr id_list = STARTS_WITH(argv[i], "--only-process=") ? argv[i] + strlen("--only-process=") : argv[++i];
@@ -774,5 +773,5 @@ int main(int argc, char **argv) {
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(*filename, &allowed_identifiers, &allowed_files, macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, macro_table_make(), scope_stack_make(), 0);
 }
