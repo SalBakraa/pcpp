@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [0.1.2] - 2023-04-30
+
+### Fixed
+
+- Fix various issues with processing conditional directives
+- Fix `path_dirname` not correctly null-terminating returned string
+- Avoid printing a superfluous newline at the end of the generated output
+
 ## [0.1.1] - 2023-04-28
 
 ### Fixed
