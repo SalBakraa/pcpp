@@ -237,7 +237,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		free((char *)next_line);
 	}
 
-	for (size_t i = 0; i < lines.count; ++i) {
+	// The last line is an empty extra line
+	for (size_t i = 0; i < lines.count-1; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		scope_item *curr_scope = scope_stack_peek(scopes);
 
