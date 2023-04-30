@@ -64,6 +64,28 @@
 
 
 #define macro1
+#define macro2_b
+
+#ifdef macro1
+	print("macro1 is defined");
+#	ifdef macro1_a
+		print("macro1_a is defined");
+#		ifndef macro1_a_a
+			print("macro1_a_a is not defined");
+#		endif
+		print("tested for macro1_a_a");
+#	elifdef macro1_b
+		print("macro1_b is defined instead of macro1_a");
+#	endif
+#else
+	print("macro1 not is not defined");
+#	ifdef macro2_b
+		print("macro2 not is not defined");
+#	endif
+#endif
+
+
+#define macro1
 #define macro1_a
 
 #ifdef macro1
