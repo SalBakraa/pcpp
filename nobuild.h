@@ -978,7 +978,7 @@ void pid_wait(Pid pid)
         if (WIFEXITED(wstatus)) {
             int exit_status = WEXITSTATUS(wstatus);
             if (exit_status != 0) {
-                PANIC("command exited with exit code %d", exit_status);
+                ERRO("command exited with exit code %d", exit_status);
             }
 
             break;
