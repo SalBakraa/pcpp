@@ -48,6 +48,22 @@ static void build(void) {
 	}
 }
 
+static void run_tests(void) {
+	FOREACH_FILE_IN_DIR(file, PATH("tests", "test"), {
+		if (strcmp(file, ".") == 0 || strcmp(file, "..") == 0) {
+			continue;
+		}
+
+		INFO("Running test: %s", file);
+		printf("\n");
+		CHAIN(CHAIN_CMD(PATH(BUILD_DIR, _BINARY_NAME), PATH("tests", "test", file)), CHAIN_OUT(PATH("tests", CONCAT("temp", "_", file))));
+		CMD("diff", "--color=always", "-y", PATH("tests", CONCAT("temp", "_", file)), PATH("tests", "expected_output", file));
+		printf("\n");
+		RM(PATH("tests", CONCAT("temp", "_", file)));
+		fprintf(stderr, "\n======================================================================================================================\n\n");
+	});
+}
+
 int main(int argc, char **argv)
 {
 	GO_REBUILD_URSELF(argc, argv);
@@ -56,7 +72,9 @@ int main(int argc, char **argv)
 
 	build();
 
-	CMD(PATH(BUILD_DIR, _BINARY_NAME), PATH("test", "hello.c"));
+	CMD(PATH(BUILD_DIR, _BINARY_NAME), PATH("tests", "hello.c"));
+
+	run_tests();
 
 	return 0;
 }

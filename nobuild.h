@@ -978,7 +978,7 @@ void pid_wait(Pid pid)
         if (WIFEXITED(wstatus)) {
             int exit_status = WEXITSTATUS(wstatus);
             if (exit_status != 0) {
-                PANIC("command exited with exit code %d", exit_status);
+                ERRO("command exited with exit code %d", exit_status);
             }
 
             break;
@@ -1271,13 +1271,13 @@ Cstr path_dirname(Cstr path)
     }
 
     // copy prefix
-    size_t len = prefix_len+1;
-    char* dirname = malloc(len);
+    size_t len = prefix_len;
+    char* dirname = malloc(len + 1);
     if (dirname == NULL) {
         PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
     }
 
-    return dirname[len] = '\0', memcpy(dirname, path, len-1);
+    return dirname[len] = '\0', memcpy(dirname, path, len);
 }
 
 Cstr path_basename(Cstr path)

@@ -237,7 +237,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		free((char *)next_line);
 	}
 
-	for (size_t i = 0; i < lines.count; ++i) {
+	// The last line is an empty extra line
+	for (size_t i = 0; i < lines.count-1; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
 		scope_item *curr_scope = scope_stack_peek(scopes);
 
@@ -246,7 +247,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		bool append_current_token = true;
 		bool current_line_was_processed = false;
 
-		PCPP_STATE state = curr_scope->should_process ? PCPP_INITIAL : PCPP_NON_DIRECTIVE;
+		PCPP_STATE state = PCPP_INITIAL;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
 			if (tok == DONE) {
@@ -290,7 +291,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							} else if (strcmp(lexer_text, "if") == 0) {
 								// Copy parent scopes values
 								scope_item *top = scope_stack_push(scopes);
-								top->conditional_is_undetermined = true;
+								top->conditional_was_processed = false;
+								top->conditional_was_resolved = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_output;
 								TODO_SAFE("Actually process expressions passed to `#if`");
@@ -304,19 +306,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								state = PCPP_DIRECTIVE_ELIFNDEF;
 							} else if (strcmp(lexer_text, "else") == 0) {
 								state = PCPP_DIRECTIVE_ELSE;
-								if (!curr_scope->conditional_is_undetermined) {
+								if (curr_scope->conditional_was_processed) {
+									TODO_SAFE("Confirm tha else is the last branch.");
 									current_line_was_processed = true;
-									if(!curr_scope->conditional_was_resolved) {
-										curr_scope->should_process = true;
-										curr_scope->should_output = true;
-									}
+									curr_scope->should_process = !curr_scope->conditional_was_resolved;
+									curr_scope->should_output = !curr_scope->conditional_was_resolved;
+									curr_scope->conditional_was_resolved = !curr_scope->conditional_was_resolved;
 								}
 							} else if (strcmp(lexer_text, "endif") == 0) {
-								if (!curr_scope->conditional_is_undetermined && curr_scope->conditional_was_resolved) {
+								if (curr_scope->conditional_was_processed) {
 									current_line_was_processed = true;
 								}
 
 								scope_stack_pop(scopes);
+								curr_scope = scope_stack_peek(scopes);
 								state = PCPP_DIRECTIVE_ENDIF;
 							} else if (strcmp(lexer_text, "include") == 0) {
 								state = PCPP_DIRECTIVE_INCLUDE;
@@ -338,6 +341,9 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
+							if (!curr_scope->should_process) {
+								break;
+							}
 							current_line_was_processed = true;
 
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
@@ -371,6 +377,9 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
+							if (!curr_scope->should_process) {
+								break;
+							}
 							current_line_was_processed = true;
 							macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
@@ -425,13 +434,17 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
 							if (def->status == MACRO_UNDETERMINED) {
-								top->conditional_is_undetermined = true;
+								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
 								break;
 							}
 
+							if (!curr_scope->should_process) {
+								break;
+							}
 							current_line_was_processed = true;
+							top->conditional_was_processed = true;
 							top->conditional_was_resolved = def->status == MACRO_DEFINED;
 							top->should_process = def->status == MACRO_DEFINED;
 							top->should_output = def->status == MACRO_DEFINED;
@@ -464,13 +477,18 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
 							scope_item *top = scope_stack_push(scopes);
 							if (def->status == MACRO_UNDETERMINED) {
-								top->conditional_is_undetermined = true;
+								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
 								break;
 							}
 
+							if (!curr_scope->should_process) {
+								break;
+							}
+
 							current_line_was_processed = true;
+							top->conditional_was_processed = true;
 							top->conditional_was_resolved = def->status == MACRO_UNDEFINED;
 							top->should_process = def->status == MACRO_UNDEFINED;
 							top->should_output = def->status == MACRO_UNDEFINED;
@@ -500,7 +518,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							if (curr_scope->conditional_is_undetermined) {
+							if (!curr_scope->conditional_was_processed) {
 								state = PCPP_DIRECTIVE_ELIFDEF_IDENTIFIER;
 								break;
 							}
@@ -548,7 +566,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							if (curr_scope->conditional_is_undetermined) {
+							if (!curr_scope->conditional_was_processed) {
 								state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 								break;
 							}
@@ -625,6 +643,9 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							TODO_SAFE("Expand `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 							break;
 						case STRING_LITERAL: {
+							if (!curr_scope->should_process) {
+								break;
+							}
 							current_line_was_processed = true;
 
 							// trim quotes from around filename
