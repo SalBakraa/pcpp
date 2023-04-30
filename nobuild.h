@@ -1271,13 +1271,13 @@ Cstr path_dirname(Cstr path)
     }
 
     // copy prefix
-    size_t len = prefix_len+1;
-    char* dirname = malloc(len);
+    size_t len = prefix_len;
+    char* dirname = malloc(len + 1);
     if (dirname == NULL) {
         PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
     }
 
-    return dirname[len] = '\0', memcpy(dirname, path, len-1);
+    return dirname[len] = '\0', memcpy(dirname, path, len);
 }
 
 Cstr path_basename(Cstr path)
