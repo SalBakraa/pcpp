@@ -754,13 +754,31 @@ int main(int argc, char **argv) {
 	Cstr *filename = NULL;
 	for (int i = 1; i < argc; ++i) {
 		if (STARTS_WITH(argv[i], "--only-process")) {
-			Cstr id_list = STARTS_WITH(argv[i], "--only-process=") ? argv[i] + strlen("--only-process=") : argv[++i];
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only-process=")) {
+				id_list = argv[i] + strlen("--only-process=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-process`.");
+				}
+				id_list = argv[++i];
+			}
+
 			allowed_identifiers = SPLIT(id_list, ",");
 			continue;
 		}
 
 		if (STARTS_WITH(argv[i], "--only-include")) {
-			Cstr file_list = STARTS_WITH(argv[i], "--only-include=") ? argv[i] + strlen("--only-include=") : argv[++i];
+			Cstr file_list;
+			if (STARTS_WITH(argv[i], "--only-include=")) {
+				file_list = argv[i] + strlen("--only-include=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-include`.");
+				}
+				file_list = argv[++i];
+			}
+
 			allowed_files = SPLIT(file_list, ",");
 			continue;
 		}
