@@ -180,6 +180,14 @@ Cstr_Array allowed_files = {0};
 // User table of definitions
 macro_table *user_symbol_table = NULL;
 
+// Methods to resolve conflict between the user defined symbols, and source defined symbols
+typedef enum CONFLICT_RESOLUTION_STRATEGIES {
+	KEEP_USER, KEEP_SOURCE, REMOVE_BOTH
+} CONFLICT_RESOLUTION_STRATEGIES;
+
+// Avoid overwriting user definitions when processing
+CONFLICT_RESOLUTION_STRATEGIES conflict_strat = KEEP_USER;
+
 void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
@@ -370,11 +378,26 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							current_line_was_processed = true;
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							if (def == NULL) {
-								def = macro_table_push(symbol_table, lexer_text);
+							switch(conflict_strat) {
+								case KEEP_USER: {
+									if (macro_table_get_def(user_symbol_table, lexer_text)->status != MACRO_UNDETERMINED) {
+										macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									} else {
+										macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									}
+									break;
+								}
+								case KEEP_SOURCE: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									break;
+								}
+								case REMOVE_BOTH: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									break;
+								}
 							}
-							def->status = MACRO_UNDEFINED;
 							state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 							break;
 						}
@@ -407,7 +430,26 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							current_line_was_processed = true;
-							macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
+							switch(conflict_strat) {
+								case KEEP_USER: {
+									if (macro_table_get_def(user_symbol_table, lexer_text)->status != MACRO_UNDETERMINED) {
+										macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									} else {
+										macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
+									}
+									break;
+								}
+								case KEEP_SOURCE: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									break;
+								}
+								case REMOVE_BOTH: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									break;
+								}
+							}
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 							break;
 						default:
@@ -477,7 +519,6 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							// User table has higher priority
 							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
-								macro_table_remove(user_symbol_table, lexer_text);
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
@@ -528,7 +569,6 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							// User table has higher priority
 							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
-								macro_table_remove(user_symbol_table, lexer_text);
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
@@ -593,7 +633,6 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							// User table has higher priority
 							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
-								macro_table_remove(user_symbol_table, lexer_text);
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
@@ -647,7 +686,6 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							// User table has higher priority
 							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
-								macro_table_remove(user_symbol_table, lexer_text);
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
@@ -942,6 +980,29 @@ int main(int argc, char **argv) {
 			}
 
 			macro_table_push_from_cmd(user_symbol_table, id)->status = MACRO_DEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--conflict")) {
+			Cstr strat;
+			if (STARTS_WITH(argv[i], "--conflict=")) {
+				strat = argv[i] + strlen("--conflict=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--conflict`.");
+				}
+				strat = argv[++i];
+			}
+
+			if (strcmp(strat, "user") == 0) {
+				conflict_strat = KEEP_USER;
+			} else if (strcmp(strat, "source") == 0) {
+				conflict_strat = KEEP_SOURCE;
+			} else if (strcmp(strat, "ignore") == 0) {
+				conflict_strat = REMOVE_BOTH;
+			} else {
+				PANIC("Invalid value to `--conflict`. Only `user`, `source`, and `ignore` are allowed.");
+			}
 			continue;
 		}
 
