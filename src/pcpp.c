@@ -418,6 +418,11 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case L_PAREN:
+							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
+								state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
+								break;
+							}
+
 							macro_table_peek(symbol_table)->takes_args = true;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 							break;
@@ -436,18 +441,24 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case IDENTIFIER:
-							macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+							if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+							}
 							break;
 						case ELLIPSIS:
-							macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
-							TODO_SAFE("Verify that the ellipsis is the last argument.");
+							if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+								TODO_SAFE("Verify that the ellipsis is the last argument.");
+							}
 							break;
 						default:
 							PANIC("Illegal token in place of argument: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
-					macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
+					if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+						macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
+					}
 					break;
 
 				/*****************************************************************************************************************/
