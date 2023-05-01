@@ -112,6 +112,7 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_DEF,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS,
+	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT,
 
 	PCPP_DIRECTIVE_IFDEF,
@@ -170,11 +171,14 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 	return false;
 }
 
-// List of identifers allowed to be expanded and defined/undefined
+// List of identifiers allowed to be expanded and defined/undefined
 Cstr_Array allowed_identifiers = {0};
 
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
+
+// User table of definitions
+macro_table *user_symbol_table = NULL;
 
 void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
@@ -470,7 +474,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								macro_table_remove(user_symbol_table, lexer_text);
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							scope_item *top = scope_stack_push(scopes);
 							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
@@ -515,7 +525,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								macro_table_remove(user_symbol_table, lexer_text);
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							scope_item *top = scope_stack_push(scopes);
 							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
@@ -574,7 +590,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								macro_table_remove(user_symbol_table, lexer_text);
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							if (def->status == MACRO_UNDETERMINED) {
 								PANIC("Macros used in `elifdef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
@@ -622,7 +644,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								macro_table_remove(user_symbol_table, lexer_text);
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							if (def->status == MACRO_UNDETERMINED) {
 								PANIC("Macros used in `elifndef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
@@ -731,6 +759,12 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							PANIC("Extra token at end of `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
+
+				/*****************************************************************************************************************/
+
+				case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD:
+					// Case is only used in `macro_table_push_from_cmd`
+					__builtin_unreachable();
 			}
 			if (append_current_token) {
 				append_to_line(&output_line, lexer_text);
@@ -746,10 +780,90 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 	}
 }
 
+// Used only to parse the argument of `-D`
+macro_definition *macro_table_push_from_cmd(macro_table *table, Cstr str) {
+	YY_BUFFER_STATE line_buf = lexer__scan_string(str);
+	PCPP_STATE state = PCPP_DIRECTIVE_DEF;
+	while (true) {
+		C_TOKENS tok = lexer_lex();
+		if (tok == DONE) {
+			break;
+		}
+
+		switch (state) {
+			case PCPP_DIRECTIVE_DEF:
+				switch (tok) {
+					case IDENTIFIER:
+						macro_table_push(table, lexer_text)->status = MACRO_DEFINED;
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
+						break;
+					default:
+						PANIC("Argument to `-D` must start with with an identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER:
+				switch (tok) {
+					case ASSIGN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					case L_PAREN:
+						macro_table_peek(table)->takes_args = true;
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
+						break;
+					default:
+						PANIC("`-D` identifier must either be followed by `=` or `(`: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS:
+				switch (tok) {
+					case COMMA:
+					case COMMENT:
+					case WHITESPACE:
+						TODO_SAFE("Verify that each argument is delimited only by comma.");
+						break;
+					case R_PAREN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					case IDENTIFIER:
+						macro_definition_push_args(macro_table_peek(table), lexer_text);
+						break;
+					case ELLIPSIS:
+						macro_definition_push_args(macro_table_peek(table), lexer_text);
+						TODO_SAFE("Verify that the ellipsis is the last argument.");
+						break;
+					default:
+						PANIC("Illegal token in place of argument: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+						break;
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD:
+				switch (tok) {
+					case ASSIGN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					default:
+						PANIC("Macro argument list must be only followed by `=`: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+						break;
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
+				macro_definition_push_replacement(macro_table_peek(table), lexer_text);
+				break;
+			default:
+				__builtin_unreachable();
+		}
+	}
+	lexer__delete_buffer(line_buf);
+	return macro_table_peek(table);
+}
+
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
 		PANIC("No arguments were specified.");
 	}
+
+	user_symbol_table = macro_table_make();
 
 	Cstr *filename = NULL;
 	for (int i = 1; i < argc; ++i) {
@@ -780,6 +894,54 @@ int main(int argc, char **argv) {
 			}
 
 			allowed_files = SPLIT(file_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "-U")) {
+			if (strlen(argv[i]) < 3) {
+				PANIC("Missing argument to `-U`.");
+			}
+			Cstr id = argv[i] + strlen("-U");
+			macro_table_push(user_symbol_table, id)->status = MACRO_UNDEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--undef")) {
+			Cstr id;
+			if (STARTS_WITH(argv[i], "--undef=")) {
+				id = argv[i] + strlen("--undef=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--undef`.");
+				}
+				id = argv[++i];
+			}
+
+			macro_table_push(user_symbol_table, id)->status = MACRO_UNDEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "-D")) {
+			if (strlen(argv[i]) < 3) {
+				PANIC("Missing argument to `-D`.");
+			}
+			Cstr id = argv[i] + strlen("-D");
+			macro_table_push_from_cmd(user_symbol_table, id)->status = MACRO_DEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--define")) {
+			Cstr id;
+			if (STARTS_WITH(argv[i], "--define=")) {
+				id = argv[i] + strlen("--define=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--define`.");
+				}
+				id = argv[++i];
+			}
+
+			macro_table_push_from_cmd(user_symbol_table, id)->status = MACRO_DEFINED;
 			continue;
 		}
 
