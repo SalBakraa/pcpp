@@ -174,8 +174,14 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 // List of identifiers allowed to be expanded and defined/undefined
 Cstr_Array allowed_identifiers = {0};
 
+// Flag that overrides allowed_identifiers
+bool process_all_identifiers = 0;
+
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
+
+// Flag that overrides allowed_identifiers
+bool include_all_files = 0;
 
 // User table of definitions
 macro_table *user_symbol_table = NULL;
@@ -372,7 +378,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
@@ -424,7 +430,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
@@ -464,7 +470,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case L_PAREN:
-							if (!curr_scope->should_process || !cstr_array_contains(&allowed_identifiers, lexer_text)) {
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 								break;
 							}
@@ -487,12 +493,12 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case IDENTIFIER:
-							if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 							}
 							break;
 						case ELLIPSIS:
-							if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 								TODO_SAFE("Verify that the ellipsis is the last argument.");
 							}
@@ -502,7 +508,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
-					if (curr_scope->should_process && cstr_array_contains(&allowed_identifiers, lexer_text)) {
+					if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 						macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
 					}
 					break;
@@ -523,7 +529,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -573,7 +579,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!cstr_array_contains(&allowed_identifiers, lexer_text) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -771,7 +777,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 							included_file[len] = '\0';
 							strncpy(included_file, lexer_text + 1, len);
-							if (!cstr_array_contains(&allowed_files, included_file)) {
+							if (!(include_all_files || cstr_array_contains(&allowed_files, included_file))) {
 								current_line_was_processed = false;
 								state = PCPP_DIRECTIVE_INCLUDE_FILE;
 								break;
@@ -920,6 +926,11 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
+		if (STARTS_WITH(argv[i], "--process-all")) {
+			process_all_identifiers = true;
+			continue;
+		}
+
 		if (STARTS_WITH(argv[i], "--only-include")) {
 			Cstr file_list;
 			if (STARTS_WITH(argv[i], "--only-include=")) {
@@ -932,6 +943,11 @@ int main(int argc, char **argv) {
 			}
 
 			allowed_files = SPLIT(file_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--include-all")) {
+			include_all_files = true;
 			continue;
 		}
 
@@ -1017,8 +1033,8 @@ int main(int argc, char **argv) {
 		PANIC("Input file has not been specified.");
 	}
 
-	// Simply output the file if no identifers are allowed to used
-	if (allowed_identifiers.count == 0 && allowed_files.count == 0) {
+	// Simply output the file if no identifiers are allowed to used
+	if (!process_all_identifiers && !include_all_files && allowed_identifiers.count == 0 && allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
