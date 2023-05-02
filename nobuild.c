@@ -62,6 +62,7 @@ int main(int argc, char **argv)
 	CMD(PATH("tests", "test_ifdef.sh"));
 	CMD(PATH("tests", "test_nested_ifdef.sh"));
 	CMD(PATH("tests", "test_conflict_strats.sh"));
+	CMD(PATH("tests", "test_comments.sh"));
 
 	return 0;
 }
