@@ -187,6 +187,9 @@ bool include_all_files = false;
 // Flag to surround include derictives with line directives
 bool surround_includes_with_line = false;
 
+// Flag to have undetermined macros be implicitly-undefined
+bool implicitly_undefine = false;
+
 // User table of definitions
 macro_table *user_symbol_table = NULL;
 
@@ -691,7 +694,8 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -741,7 +745,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 
 				/*****************************************************************************************************************/
 
-				/* IFDEF */
+				/* IFNDEF */
 				case PCPP_DIRECTIVE_IFNDEF:
 					switch (tok) {
 						case COMMENT:
@@ -769,7 +773,8 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -784,9 +789,9 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 
 							current_line_was_processed = true;
 							top->conditional_was_processed = true;
-							top->conditional_was_resolved = def->status == MACRO_UNDEFINED;
-							top->should_process = def->status == MACRO_UNDEFINED;
-							top->should_output = def->status == MACRO_UNDEFINED;
+							top->conditional_was_resolved = def->status != MACRO_DEFINED;
+							top->should_process = def->status != MACRO_DEFINED;
+							top->should_output = def->status != MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 							break;
 						}
@@ -860,7 +865,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
-							if (def->status == MACRO_UNDETERMINED) {
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
 								PANIC("Macros used in `elifdef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
 							}
@@ -941,14 +946,14 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
-							if (def->status == MACRO_UNDETERMINED) {
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
 								PANIC("Macros used in `elifndef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
 							}
 
-							curr_scope->conditional_was_resolved = def->status == MACRO_UNDEFINED;
-							curr_scope->should_process = def->status == MACRO_UNDEFINED;
-							curr_scope->should_output = def->status == MACRO_UNDEFINED;
+							curr_scope->conditional_was_resolved = def->status != MACRO_DEFINED;
+							curr_scope->should_process = def->status != MACRO_DEFINED;
+							curr_scope->should_output = def->status != MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 							break;
 						}
@@ -1382,6 +1387,11 @@ int main(int argc, char **argv) {
 			}
 
 			output = fd_open_for_write(out_file);
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--implicitly-undef")) {
+			implicitly_undefine = true;
 			continue;
 		}
 
