@@ -12,8 +12,8 @@
 [Rr]elease/
 x64/
 build/
-nbuild
-nbuild.old
+nobuild
+nobuild.old
 install/
 [Bb]in/
 [Oo]bj/
