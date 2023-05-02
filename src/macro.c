@@ -13,7 +13,7 @@ typedef enum {
 typedef struct {
 	Cstr identifier;
 	macro_status status;
-	bool takes_args;
+	bool is_function;
 	Cstr_Array args;
 	Cstr_Array replacement;
 } macro_definition;
@@ -26,7 +26,7 @@ macro_definition *macro_definitione_make() {
 
 	memset(def, 0, sizeof *def);
 	def->status = MACRO_UNDETERMINED;
-	def->takes_args = false;
+	def->is_function = false;
 	def->args = cstr_array_make(NULL);
 	def->replacement = cstr_array_make(NULL);
 	return def;
@@ -42,7 +42,7 @@ void macro_definition_set_identifier(macro_definition *def, Cstr identifier) {
 }
 
 void macro_definition_push_args(macro_definition *def, Cstr token) {
-	if (!def->takes_args) {
+	if (!def->is_function) {
 		PANIC("Macro definition '%s' does not take args.", def->identifier);
 	}
 	def->args = cstr_array_append(def->args, token);
@@ -93,7 +93,7 @@ macro_definition *macro_table_push(macro_table *table, Cstr identifier) {
 			// Move the macro to end of the array so that it can be peeked
 			macro_definition *macro = table->macros[i];
 			// Reset the macro definition
-			macro->takes_args = false;
+			macro->is_function = false;
 			macro->args = cstr_array_make(NULL);
 			macro->replacement = cstr_array_make(NULL);
 

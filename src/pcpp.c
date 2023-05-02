@@ -475,7 +475,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							macro_table_peek(symbol_table)->takes_args = true;
+							macro_table_peek(symbol_table)->is_function = true;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 							break;
 						default:
@@ -851,7 +851,7 @@ macro_definition *macro_table_push_from_cmd(macro_table *table, Cstr str) {
 						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 						break;
 					case L_PAREN:
-						macro_table_peek(table)->takes_args = true;
+						macro_table_peek(table)->is_function = true;
 						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 						break;
 					default:
