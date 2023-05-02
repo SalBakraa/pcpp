@@ -1233,10 +1233,31 @@ macro_definition *macro_table_push_from_cmd(macro_table *table, Cstr str) {
 	return macro_table_peek(table);
 }
 
+const char *usage =
+	"USAGE:\n"
+	"\tpcpp [FLAGS] [OPTIONS] <FILE>\n"
+	"\n"
+	"FLAGS:\n"
+	"\t    --process-all          Process all macro that are encountered. Overrides `--only-process`.\n"
+	"\t    --include_all          Include all files that are encountered. Overrides `--only-include`.\n"
+	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
+	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
+	"\t-h, --help                 Print this usage text and exit\n"
+	"\n"
+	"OPTIONS:\n"
+	"\t-DMACRO[(ARGS)][=DEF], --define[=]MACRO[(ARGS)][=DEF]     Assume MACRO is defined when processing.\n"
+	"\t              -UMACRO, --undef[=]MACRO                    Assume MACRO is undefined when processing.\n"
+	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed.\n"
+	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
+	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
+	"\t               -oFILE, --output[=]FILE                    Redirect output into FILE.\n"
+	"";
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		PANIC("No arguments were specified.");
+		ERRO("Input file has not been specified.");
+		fd_printf(fd_stdout, "%s", usage);
+		exit(1);
 	}
 
 	user_symbol_table = macro_table_make();
@@ -1395,6 +1416,11 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
+		if (STARTS_WITH(argv[i], "-h") || STARTS_WITH(argv[i], "--help") ) {
+			fd_printf(fd_stdout, "%s", usage);
+			exit(0);
+		}
+
 		if (filename != NULL) {
 			PANIC("Input file has already been specified: '%s' replaces '%s'", argv[i], *filename);
 		}
@@ -1403,7 +1429,9 @@ int main(int argc, char **argv) {
 	}
 
 	if (filename == NULL) {
-		PANIC("Input file has not been specified.");
+		ERRO("Input file has not been specified.");
+		fd_printf(fd_stdout, "%s", usage);
+		exit(1);
 	}
 
 	// Simply output the file if no identifiers are allowed to used
