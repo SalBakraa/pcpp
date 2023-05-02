@@ -102,6 +102,8 @@ Cstr_Array cstr_split_newline(Cstr cstr)
 
 typedef enum PCPP_STATE {
 	PCPP_INITIAL,
+	PCPP_MULTILINE_COMMENT,
+
 	PCPP_NON_DIRECTIVE,
 
 	PCPP_DIRECTIVE,
@@ -274,6 +276,14 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		free((char *)next_line);
 	}
 
+
+	bool is_inside_comment = false;
+	PCPP_STATE stored_state = PCPP_INITIAL; // Used when exiting multi-line comments
+	Cstr_Array stored_output_line = cstr_array_make(NULL);
+	bool stored_append_current_token = true;
+	bool stored_current_line_was_processed = false;
+
+
 	// The last line is an empty extra line
 	for (size_t i = 0; i < lines.count-1; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
@@ -284,7 +294,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		bool append_current_token = true;
 		bool current_line_was_processed = false;
 
-		PCPP_STATE state = PCPP_INITIAL;
+		PCPP_STATE state = !is_inside_comment ? PCPP_INITIAL : PCPP_MULTILINE_COMMENT;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
 			if (tok == DONE) {
@@ -297,6 +307,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case HASH:
 							state = PCPP_DIRECTIVE;
 							break;
@@ -308,8 +332,46 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 				/*****************************************************************************************************************/
 
+				/* Inside multi-line comments */
+				case PCPP_MULTILINE_COMMENT:
+					switch (tok) {
+						case COMMENT_END:
+							is_inside_comment = false;
+
+							state = stored_state;
+							append_current_token = stored_append_current_token;
+							current_line_was_processed = stored_current_line_was_processed;
+
+							output_line = cstr_array_concat(cstr_array_make(NULL), stored_output_line);
+							stored_output_line = cstr_array_make(NULL);
+							break;
+						default:
+							break;
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
 				/* Regular C code */
 				case PCPP_NON_DIRECTIVE:
+					switch (tok) {
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
+						default:
+							break;
+					}
 					break;
 
 				/*****************************************************************************************************************/
@@ -319,6 +381,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
 							if (strcmp(lexer_text, "undef") == 0) {
@@ -377,6 +453,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER: {
 							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
 								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
@@ -416,6 +506,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Undefine directive must only be followed by a single token: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -428,6 +532,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
 							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
@@ -466,6 +584,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case WHITESPACE:
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
@@ -488,6 +620,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							TODO_SAFE("Verify that each argument is delimited only by comma.");
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case R_PAREN:
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
@@ -520,6 +666,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							// User table has higher priority
@@ -558,6 +718,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -570,6 +744,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							// User table has higher priority
@@ -609,6 +797,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -621,6 +823,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							if (!curr_scope->conditional_was_processed) {
@@ -662,6 +878,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `elifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -674,6 +904,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							if (!curr_scope->conditional_was_processed) {
@@ -715,6 +959,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `elifndef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -727,6 +985,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						default:
 							PANIC("Extra token at end of `else` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
@@ -741,6 +1013,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `endif` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -753,6 +1039,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
 							TODO_SAFE("Expand `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
@@ -799,6 +1099,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -810,11 +1124,17 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					// Case is only used in `macro_table_push_from_cmd`
 					__builtin_unreachable();
 			}
+			if (is_inside_comment) {
+				append_to_line(&stored_output_line, lexer_text);
+			}
 			if (append_current_token) {
 				append_to_line(&output_line, lexer_text);
 			}
 		}
-		if (curr_scope->should_output && !current_line_was_processed) {
+		if (is_inside_comment) {
+			append_to_line(&stored_output_line, "\n");
+		}
+		if (!is_inside_comment && curr_scope->should_output && !current_line_was_processed) {
 			fd_printf(fd_stdout, "%s\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
