@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.2.3] - 2023-05-02
+
+### Added
+
+- Add `-h` and `--help` flag to print the program's usage.
+
 ## [0.2.2] - 2023-05-02
 
 ### Added
