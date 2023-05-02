@@ -139,7 +139,6 @@ typedef enum PCPP_STATE {
 
 
 void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
-
 	size_t len = strlen(cstr);
 	char *temp = malloc(sizeof *temp * (len + 1));
 	if (temp == NULL) {
@@ -148,16 +147,16 @@ void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
 
 	temp = memcpy(temp, cstr, len+1);
 
-    if (cstrs->capacity < 1) {
-        cstrs->elems = realloc(cstrs->elems, sizeof *cstrs->elems * (cstrs->count + 10));
-        cstrs->capacity += 10;
-        if (cstrs->elems == NULL) {
-            PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
-        }
-    }
+	if (cstrs->capacity < 1) {
+		cstrs->elems = realloc(cstrs->elems, sizeof *cstrs->elems * (cstrs->count + 10));
+		cstrs->capacity += 10;
+		if (cstrs->elems == NULL) {
+			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+		}
+	}
 
-    cstrs->elems[cstrs->count++] = temp;
-    cstrs->capacity--;
+	cstrs->elems[cstrs->count++] = temp;
+	cstrs->capacity--;
 }
 
 bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
