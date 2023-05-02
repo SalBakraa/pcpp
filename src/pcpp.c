@@ -198,7 +198,7 @@ typedef enum CONFLICT_RESOLUTION_STRATEGIES {
 // Avoid overwriting user definitions when processing
 CONFLICT_RESOLUTION_STRATEGIES conflict_strat = KEEP_USER;
 
-void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
 	}
@@ -1086,11 +1086,11 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							if (surround_includes_with_line) {
-								fd_printf(fd_stdout, "#line %d \"%s\"\n", 0, included_file);
+								fd_printf(output, "#line %d \"%s\"\n", 0, included_file);
 							}
-							pre_process_file(included_file, symbol_table, scopes, depth + 1);
+							pre_process_file(included_file, output, symbol_table, scopes, depth + 1);
 							if (surround_includes_with_line) {
-								fd_printf(fd_stdout, "#line %zu \"%s\"\n", i, filename);
+								fd_printf(output, "#line %zu \"%s\"\n", i, filename);
 							}
 							lexer__switch_to_buffer(line_buf);
 							__attribute__ ((fallthrough));
@@ -1143,7 +1143,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 			append_to_line(&stored_output_line, "\n");
 		}
 		if (!is_inside_comment && curr_scope->should_output && !current_line_was_processed) {
-			fd_printf(fd_stdout, "%s\n", cstr_array_join("", output_line));
+			fd_printf(output, "%s\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
 	}
@@ -1237,6 +1237,7 @@ int main(int argc, char **argv) {
 	user_symbol_table = macro_table_make();
 
 	Cstr *filename = NULL;
+	Fd output = fd_stdout;
 	for (int i = 1; i < argc; ++i) {
 		if (STARTS_WITH(argv[i], "--only-process")) {
 			Cstr id_list;
@@ -1354,6 +1355,36 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
+		if (STARTS_WITH(argv[i], "-o")) {
+			Cstr out_file;
+			if (strlen(argv[i]) > 2) {
+				out_file = argv[i] + strlen("-o");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `-o`.");
+				}
+				out_file = argv[++i];
+			}
+
+			output = fd_open_for_write(out_file);
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--output")) {
+			Cstr out_file;
+			if (STARTS_WITH(argv[i], "--output=")) {
+				out_file = argv[i] + strlen("--output=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--output`.");
+				}
+				out_file = argv[++i];
+			}
+
+			output = fd_open_for_write(out_file);
+			continue;
+		}
+
 		if (filename != NULL) {
 			PANIC("Input file has already been specified: '%s' replaces '%s'", argv[i], *filename);
 		}
@@ -1371,7 +1402,7 @@ int main(int argc, char **argv) {
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
 		while ((read_bytes = fd_read(fd, buf, 4096)) != 0) {
-			fd_write(fd_stdout, buf, read_bytes);
+			fd_write(output, buf, read_bytes);
 		}
 		fd_close(fd);
 		return 0;
@@ -1380,5 +1411,5 @@ int main(int argc, char **argv) {
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(*filename, macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, output, macro_table_make(), scope_stack_make(), 0);
 }
