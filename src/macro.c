@@ -118,6 +118,7 @@ macro_definition *macro_table_push(macro_table *table, Cstr identifier) {
 	}
 
 	table->macros[table->count++] = macro;
+	table->capacity--;
 	return macro;
 }
 
