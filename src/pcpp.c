@@ -176,13 +176,16 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 Cstr_Array allowed_identifiers = {0};
 
 // Flag that overrides allowed_identifiers
-bool process_all_identifiers = 0;
+bool process_all_identifiers = false;
 
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
 
 // Flag that overrides allowed_identifiers
-bool include_all_files = 0;
+bool include_all_files = false;
+
+// Flag to surround include derictives with line directives
+bool surround_includes_with_line = false;
 
 // User table of definitions
 macro_table *user_symbol_table = NULL;
@@ -1082,7 +1085,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
+							if (surround_includes_with_line) {
+								fd_printf(fd_stdout, "#line %d \"%s\"\n", 0, included_file);
+							}
 							pre_process_file(included_file, symbol_table, scopes, depth + 1);
+							if (surround_includes_with_line) {
+								fd_printf(fd_stdout, "#line %zu \"%s\"\n", i, filename);
+							}
 							lexer__switch_to_buffer(line_buf);
 							__attribute__ ((fallthrough));
 						}
@@ -1337,6 +1346,11 @@ int main(int argc, char **argv) {
 			} else {
 				PANIC("Invalid value to `--conflict`. Only `user`, `source`, and `ignore` are allowed.");
 			}
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--line-around-include")) {
+			surround_includes_with_line = true;
 			continue;
 		}
 
