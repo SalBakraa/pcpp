@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.2.1] - 2023-05-02
+
+### Fixed
+
+- Fix segfault when parsing files with more than 13 macros.
+
 ## [0.2.0] - 2023-05-02
 
 #### Changed
