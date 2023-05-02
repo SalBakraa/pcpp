@@ -176,13 +176,19 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 Cstr_Array allowed_identifiers = {0};
 
 // Flag that overrides allowed_identifiers
-bool process_all_identifiers = 0;
+bool process_all_identifiers = false;
 
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
 
 // Flag that overrides allowed_identifiers
-bool include_all_files = 0;
+bool include_all_files = false;
+
+// Flag to surround include derictives with line directives
+bool surround_includes_with_line = false;
+
+// Flag to have undetermined macros be implicitly-undefined
+bool implicitly_undefine = false;
 
 // User table of definitions
 macro_table *user_symbol_table = NULL;
@@ -195,7 +201,7 @@ typedef enum CONFLICT_RESOLUTION_STRATEGIES {
 // Avoid overwriting user definitions when processing
 CONFLICT_RESOLUTION_STRATEGIES conflict_strat = KEEP_USER;
 
-void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
+void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
 		return;
 	}
@@ -688,7 +694,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -738,7 +745,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 				/*****************************************************************************************************************/
 
-				/* IFDEF */
+				/* IFNDEF */
 				case PCPP_DIRECTIVE_IFNDEF:
 					switch (tok) {
 						case COMMENT:
@@ -766,7 +773,8 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
@@ -781,9 +789,9 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 							current_line_was_processed = true;
 							top->conditional_was_processed = true;
-							top->conditional_was_resolved = def->status == MACRO_UNDEFINED;
-							top->should_process = def->status == MACRO_UNDEFINED;
-							top->should_output = def->status == MACRO_UNDEFINED;
+							top->conditional_was_resolved = def->status != MACRO_DEFINED;
+							top->should_process = def->status != MACRO_DEFINED;
+							top->should_output = def->status != MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 							break;
 						}
@@ -857,7 +865,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
-							if (def->status == MACRO_UNDETERMINED) {
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
 								PANIC("Macros used in `elifdef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
 							}
@@ -938,14 +946,14 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								def = macro_table_get_def(symbol_table, lexer_text);
 							}
 
-							if (def->status == MACRO_UNDETERMINED) {
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
 								PANIC("Macros used in `elifndef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
 							}
 
-							curr_scope->conditional_was_resolved = def->status == MACRO_UNDEFINED;
-							curr_scope->should_process = def->status == MACRO_UNDEFINED;
-							curr_scope->should_output = def->status == MACRO_UNDEFINED;
+							curr_scope->conditional_was_resolved = def->status != MACRO_DEFINED;
+							curr_scope->should_process = def->status != MACRO_DEFINED;
+							curr_scope->should_output = def->status != MACRO_DEFINED;
 							state = PCPP_DIRECTIVE_ELIFNDEF_IDENTIFIER;
 							break;
 						}
@@ -1082,7 +1090,13 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							pre_process_file(included_file, symbol_table, scopes, depth + 1);
+							if (surround_includes_with_line) {
+								fd_printf(output, "#line %d \"%s\"\n", 0, included_file);
+							}
+							pre_process_file(included_file, output, symbol_table, scopes, depth + 1);
+							if (surround_includes_with_line) {
+								fd_printf(output, "#line %zu \"%s\"\n", i, filename);
+							}
 							lexer__switch_to_buffer(line_buf);
 							__attribute__ ((fallthrough));
 						}
@@ -1134,7 +1148,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 			append_to_line(&stored_output_line, "\n");
 		}
 		if (!is_inside_comment && curr_scope->should_output && !current_line_was_processed) {
-			fd_printf(fd_stdout, "%s\n", cstr_array_join("", output_line));
+			fd_printf(output, "%s\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
 	}
@@ -1228,6 +1242,7 @@ int main(int argc, char **argv) {
 	user_symbol_table = macro_table_make();
 
 	Cstr *filename = NULL;
+	Fd output = fd_stdout;
 	for (int i = 1; i < argc; ++i) {
 		if (STARTS_WITH(argv[i], "--only-process")) {
 			Cstr id_list;
@@ -1340,6 +1355,46 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
+		if (STARTS_WITH(argv[i], "--line-around-include")) {
+			surround_includes_with_line = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "-o")) {
+			Cstr out_file;
+			if (strlen(argv[i]) > 2) {
+				out_file = argv[i] + strlen("-o");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `-o`.");
+				}
+				out_file = argv[++i];
+			}
+
+			output = fd_open_for_write(out_file);
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--output")) {
+			Cstr out_file;
+			if (STARTS_WITH(argv[i], "--output=")) {
+				out_file = argv[i] + strlen("--output=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--output`.");
+				}
+				out_file = argv[++i];
+			}
+
+			output = fd_open_for_write(out_file);
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--implicitly-undef")) {
+			implicitly_undefine = true;
+			continue;
+		}
+
 		if (filename != NULL) {
 			PANIC("Input file has already been specified: '%s' replaces '%s'", argv[i], *filename);
 		}
@@ -1357,7 +1412,7 @@ int main(int argc, char **argv) {
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
 		while ((read_bytes = fd_read(fd, buf, 4096)) != 0) {
-			fd_write(fd_stdout, buf, read_bytes);
+			fd_write(output, buf, read_bytes);
 		}
 		fd_close(fd);
 		return 0;
@@ -1366,5 +1421,5 @@ int main(int argc, char **argv) {
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(*filename, macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, output, macro_table_make(), scope_stack_make(), 0);
 }
