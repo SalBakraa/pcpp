@@ -1181,7 +1181,6 @@ macro_definition *macro_table_push_from_cmd(macro_table *table, Cstr str) {
 			case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS:
 				switch (tok) {
 					case COMMA:
-					case COMMENT:
 					case WHITESPACE:
 						TODO_SAFE("Verify that each argument is delimited only by comma.");
 						break;
