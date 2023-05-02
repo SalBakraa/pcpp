@@ -102,6 +102,8 @@ Cstr_Array cstr_split_newline(Cstr cstr)
 
 typedef enum PCPP_STATE {
 	PCPP_INITIAL,
+	PCPP_MULTILINE_COMMENT,
+
 	PCPP_NON_DIRECTIVE,
 
 	PCPP_DIRECTIVE,
@@ -112,6 +114,7 @@ typedef enum PCPP_STATE {
 	PCPP_DIRECTIVE_DEF,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS,
+	PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD,
 	PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT,
 
 	PCPP_DIRECTIVE_IFDEF,
@@ -136,7 +139,6 @@ typedef enum PCPP_STATE {
 
 
 void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
-
 	size_t len = strlen(cstr);
 	char *temp = malloc(sizeof *temp * (len + 1));
 	if (temp == NULL) {
@@ -145,17 +147,53 @@ void append_to_line(Cstr_Array *cstrs, Cstr cstr) {
 
 	temp = memcpy(temp, cstr, len+1);
 
-    if (cstrs->capacity < 1) {
-        cstrs->elems = realloc(cstrs->elems, sizeof *cstrs->elems * (cstrs->count + 10));
-        cstrs->capacity += 10;
-        if (cstrs->elems == NULL) {
-            PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
-        }
-    }
+	if (cstrs->capacity < 1) {
+		cstrs->elems = realloc(cstrs->elems, sizeof *cstrs->elems * (cstrs->count + 10));
+		cstrs->capacity += 10;
+		if (cstrs->elems == NULL) {
+			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
+		}
+	}
 
-    cstrs->elems[cstrs->count++] = temp;
-    cstrs->capacity--;
+	cstrs->elems[cstrs->count++] = temp;
+	cstrs->capacity--;
 }
+
+bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
+	if (arr == NULL) {
+		return false;
+	}
+
+	for (size_t i = 0; i < arr->count; ++i) {
+		if (strcmp(val, arr->elems[i]) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// List of identifiers allowed to be expanded and defined/undefined
+Cstr_Array allowed_identifiers = {0};
+
+// Flag that overrides allowed_identifiers
+bool process_all_identifiers = 0;
+
+// List of file names allowed to be expanded into the final output
+Cstr_Array allowed_files = {0};
+
+// Flag that overrides allowed_identifiers
+bool include_all_files = 0;
+
+// User table of definitions
+macro_table *user_symbol_table = NULL;
+
+// Methods to resolve conflict between the user defined symbols, and source defined symbols
+typedef enum CONFLICT_RESOLUTION_STRATEGIES {
+	KEEP_USER, KEEP_SOURCE, REMOVE_BOTH
+} CONFLICT_RESOLUTION_STRATEGIES;
+
+// Avoid overwriting user definitions when processing
+CONFLICT_RESOLUTION_STRATEGIES conflict_strat = KEEP_USER;
 
 void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *scopes, unsigned int depth) {
 	if (depth > 200) {
@@ -237,6 +275,14 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		free((char *)next_line);
 	}
 
+
+	bool is_inside_comment = false;
+	PCPP_STATE stored_state = PCPP_INITIAL; // Used when exiting multi-line comments
+	Cstr_Array stored_output_line = cstr_array_make(NULL);
+	bool stored_append_current_token = true;
+	bool stored_current_line_was_processed = false;
+
+
 	// The last line is an empty extra line
 	for (size_t i = 0; i < lines.count-1; ++i) {
 		YY_BUFFER_STATE line_buf = lexer__scan_string(lines.elems[i]);
@@ -247,7 +293,7 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 		bool append_current_token = true;
 		bool current_line_was_processed = false;
 
-		PCPP_STATE state = PCPP_INITIAL;
+		PCPP_STATE state = !is_inside_comment ? PCPP_INITIAL : PCPP_MULTILINE_COMMENT;
 		while (true) {
 			C_TOKENS tok = lexer_lex();
 			if (tok == DONE) {
@@ -260,6 +306,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case HASH:
 							state = PCPP_DIRECTIVE;
 							break;
@@ -271,8 +331,46 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 				/*****************************************************************************************************************/
 
+				/* Inside multi-line comments */
+				case PCPP_MULTILINE_COMMENT:
+					switch (tok) {
+						case COMMENT_END:
+							is_inside_comment = false;
+
+							state = stored_state;
+							append_current_token = stored_append_current_token;
+							current_line_was_processed = stored_current_line_was_processed;
+
+							output_line = cstr_array_concat(cstr_array_make(NULL), stored_output_line);
+							stored_output_line = cstr_array_make(NULL);
+							break;
+						default:
+							break;
+					}
+					break;
+
+				/*****************************************************************************************************************/
+
 				/* Regular C code */
 				case PCPP_NON_DIRECTIVE:
+					switch (tok) {
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
+						default:
+							break;
+					}
 					break;
 
 				/*****************************************************************************************************************/
@@ -282,6 +380,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
 							if (strcmp(lexer_text, "undef") == 0) {
@@ -340,17 +452,47 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
-							current_line_was_processed = true;
 
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							if (def == NULL) {
-								def = macro_table_push(symbol_table, lexer_text);
+							current_line_was_processed = true;
+							switch(conflict_strat) {
+								case KEEP_USER: {
+									if (macro_table_get_def(user_symbol_table, lexer_text)->status != MACRO_UNDETERMINED) {
+										macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									} else {
+										macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									}
+									break;
+								}
+								case KEEP_SOURCE: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									break;
+								}
+								case REMOVE_BOTH: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_get_def(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									break;
+								}
 							}
-							def->status = MACRO_UNDEFINED;
 							state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 							break;
 						}
@@ -362,6 +504,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						default:
 							PANIC("Undefine directive must only be followed by a single token: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
@@ -376,12 +532,47 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
+
 							current_line_was_processed = true;
-							macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
+							switch(conflict_strat) {
+								case KEEP_USER: {
+									if (macro_table_get_def(user_symbol_table, lexer_text)->status != MACRO_UNDETERMINED) {
+										macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									} else {
+										macro_table_push(symbol_table, lexer_text)->status = MACRO_DEFINED;
+									}
+									break;
+								}
+								case KEEP_SOURCE: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDEFINED;
+									break;
+								}
+								case REMOVE_BOTH: {
+									macro_table_get_def(user_symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									macro_table_push(symbol_table, lexer_text)->status = MACRO_UNDETERMINED;
+									break;
+								}
+							}
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 							break;
 						default:
@@ -392,11 +583,30 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case WHITESPACE:
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case L_PAREN:
-							macro_table_peek(symbol_table)->takes_args = true;
+							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+								state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
+								break;
+							}
+
+							macro_table_peek(symbol_table)->is_function = true;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 							break;
 						default:
@@ -410,16 +620,42 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case WHITESPACE:
 							TODO_SAFE("Verify that each argument is delimited only by comma.");
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case R_PAREN:
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
-						default:
-							macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+						case IDENTIFIER:
+							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+							}
 							break;
+						case ELLIPSIS:
+							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
+								TODO_SAFE("Verify that the ellipsis is the last argument.");
+							}
+							break;
+						default:
+							PANIC("Illegal token in place of argument: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
-					macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
+					if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+						macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
+					}
 					break;
 
 				/*****************************************************************************************************************/
@@ -430,17 +666,38 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER: {
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							scope_item *top = scope_stack_push(scopes);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
+							scope_item *top = scope_stack_push(scopes);
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
 							}
 
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
 							}
 							current_line_was_processed = true;
@@ -460,6 +717,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -473,17 +744,38 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER: {
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
-							scope_item *top = scope_stack_push(scopes);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
 							if (def->status == MACRO_UNDETERMINED) {
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
+							scope_item *top = scope_stack_push(scopes);
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text)) || def->status == MACRO_UNDETERMINED) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 								break;
 							}
 
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
 								break;
 							}
 
@@ -504,6 +796,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `ifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -516,6 +822,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							if (!curr_scope->conditional_was_processed) {
@@ -531,7 +851,12 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							if (def->status == MACRO_UNDETERMINED) {
 								PANIC("Macros used in `elifdef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
@@ -552,6 +877,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `elifdef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -564,6 +903,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
 							if (!curr_scope->conditional_was_processed) {
@@ -579,7 +932,12 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 								break;
 							}
 
-							macro_definition *def = macro_table_get_def(symbol_table, lexer_text);
+							// User table has higher priority
+							macro_definition *def = macro_table_get_def(user_symbol_table, lexer_text);
+							if (def->status == MACRO_UNDETERMINED) {
+								def = macro_table_get_def(symbol_table, lexer_text);
+							}
+
 							if (def->status == MACRO_UNDETERMINED) {
 								PANIC("Macros used in `elifndef` must me explcitly defined/undefined: %s", lexer_text);
 								break;
@@ -600,6 +958,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `elifndef` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -612,6 +984,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 					switch (tok) {
 						case COMMENT:
 						case WHITESPACE:
+							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						default:
 							PANIC("Extra token at end of `else` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
@@ -626,6 +1012,20 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `endif` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
@@ -639,11 +1039,26 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						case IDENTIFIER:
 							TODO_SAFE("Expand `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 							break;
 						case STRING_LITERAL: {
 							if (!curr_scope->should_process) {
+								state = PCPP_DIRECTIVE_INCLUDE_FILE;
 								break;
 							}
 							current_line_was_processed = true;
@@ -661,9 +1076,16 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 
 							included_file[len] = '\0';
 							strncpy(included_file, lexer_text + 1, len);
+							if (!(include_all_files || cstr_array_contains(&allowed_files, included_file))) {
+								current_line_was_processed = false;
+								state = PCPP_DIRECTIVE_INCLUDE_FILE;
+								break;
+							}
+
 							pre_process_file(included_file, symbol_table, scopes, depth + 1);
 							lexer__switch_to_buffer(line_buf);
-						}	/* fallthrough */
+							__attribute__ ((fallthrough));
+						}
 						case HEADER_LITERAL:
 							state = PCPP_DIRECTIVE_INCLUDE_FILE;
 							break;
@@ -676,16 +1098,42 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 						case COMMENT:
 						case WHITESPACE:
 							break;
+						case COMMENT_START:
+							is_inside_comment = true;
+
+							stored_state = state;
+							stored_output_line = cstr_array_concat(stored_output_line, output_line);
+
+							stored_append_current_token = append_current_token;
+							stored_current_line_was_processed = current_line_was_processed;
+
+							state = PCPP_MULTILINE_COMMENT;
+							break;
+						case COMMENT_END:
+							PANIC("Multi-line comment terminator outside of multi-line comment.");
+							break;
 						default:
 							PANIC("Extra token at end of `include` derictives: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
 					}
 					break;
+
+				/*****************************************************************************************************************/
+
+				case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD:
+					// Case is only used in `macro_table_push_from_cmd`
+					__builtin_unreachable();
+			}
+			if (is_inside_comment) {
+				append_to_line(&stored_output_line, lexer_text);
 			}
 			if (append_current_token) {
 				append_to_line(&output_line, lexer_text);
 			}
 		}
-		if (curr_scope->should_output && !current_line_was_processed) {
+		if (is_inside_comment) {
+			append_to_line(&stored_output_line, "\n");
+		}
+		if (!is_inside_comment && curr_scope->should_output && !current_line_was_processed) {
 			fd_printf(fd_stdout, "%s\n", cstr_array_join("", output_line));
 		}
 		lexer__delete_buffer(line_buf);
@@ -695,13 +1143,228 @@ void pre_process_file(Cstr filename, macro_table *symbol_table, scope_stack *sco
 	}
 }
 
+// Used only to parse the argument of `-D`
+macro_definition *macro_table_push_from_cmd(macro_table *table, Cstr str) {
+	YY_BUFFER_STATE line_buf = lexer__scan_string(str);
+	PCPP_STATE state = PCPP_DIRECTIVE_DEF;
+	while (true) {
+		C_TOKENS tok = lexer_lex();
+		if (tok == DONE) {
+			break;
+		}
+
+		switch (state) {
+			case PCPP_DIRECTIVE_DEF:
+				switch (tok) {
+					case IDENTIFIER:
+						macro_table_push(table, lexer_text)->status = MACRO_DEFINED;
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
+						break;
+					default:
+						PANIC("Argument to `-D` must start with with an identifier: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER:
+				switch (tok) {
+					case ASSIGN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					case L_PAREN:
+						macro_table_peek(table)->is_function = true;
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
+						break;
+					default:
+						PANIC("`-D` identifier must either be followed by `=` or `(`: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS:
+				switch (tok) {
+					case COMMA:
+					case WHITESPACE:
+						TODO_SAFE("Verify that each argument is delimited only by comma.");
+						break;
+					case R_PAREN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					case IDENTIFIER:
+						macro_definition_push_args(macro_table_peek(table), lexer_text);
+						break;
+					case ELLIPSIS:
+						macro_definition_push_args(macro_table_peek(table), lexer_text);
+						TODO_SAFE("Verify that the ellipsis is the last argument.");
+						break;
+					default:
+						PANIC("Illegal token in place of argument: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+						break;
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS_CMD:
+				switch (tok) {
+					case ASSIGN:
+						state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
+						break;
+					default:
+						PANIC("Macro argument list must be only followed by `=`: %s -> %s", C_TOKENS_STRING[tok], lexer_text);
+						break;
+				}
+				break;
+			case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
+				macro_definition_push_replacement(macro_table_peek(table), lexer_text);
+				break;
+			default:
+				__builtin_unreachable();
+		}
+	}
+	lexer__delete_buffer(line_buf);
+	return macro_table_peek(table);
+}
+
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		PANIC("No argument was specified.");
+		PANIC("No arguments were specified.");
+	}
+
+	user_symbol_table = macro_table_make();
+
+	Cstr *filename = NULL;
+	for (int i = 1; i < argc; ++i) {
+		if (STARTS_WITH(argv[i], "--only-process")) {
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only-process=")) {
+				id_list = argv[i] + strlen("--only-process=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-process`.");
+				}
+				id_list = argv[++i];
+			}
+
+			allowed_identifiers = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--process-all")) {
+			process_all_identifiers = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only-include")) {
+			Cstr file_list;
+			if (STARTS_WITH(argv[i], "--only-include=")) {
+				file_list = argv[i] + strlen("--only-include=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-include`.");
+				}
+				file_list = argv[++i];
+			}
+
+			allowed_files = SPLIT(file_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--include-all")) {
+			include_all_files = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "-U")) {
+			if (strlen(argv[i]) < 3) {
+				PANIC("Missing argument to `-U`.");
+			}
+			Cstr id = argv[i] + strlen("-U");
+			macro_table_push(user_symbol_table, id)->status = MACRO_UNDEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--undef")) {
+			Cstr id;
+			if (STARTS_WITH(argv[i], "--undef=")) {
+				id = argv[i] + strlen("--undef=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--undef`.");
+				}
+				id = argv[++i];
+			}
+
+			macro_table_push(user_symbol_table, id)->status = MACRO_UNDEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "-D")) {
+			if (strlen(argv[i]) < 3) {
+				PANIC("Missing argument to `-D`.");
+			}
+			Cstr id = argv[i] + strlen("-D");
+			macro_table_push_from_cmd(user_symbol_table, id)->status = MACRO_DEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--define")) {
+			Cstr id;
+			if (STARTS_WITH(argv[i], "--define=")) {
+				id = argv[i] + strlen("--define=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--define`.");
+				}
+				id = argv[++i];
+			}
+
+			macro_table_push_from_cmd(user_symbol_table, id)->status = MACRO_DEFINED;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--conflict")) {
+			Cstr strat;
+			if (STARTS_WITH(argv[i], "--conflict=")) {
+				strat = argv[i] + strlen("--conflict=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--conflict`.");
+				}
+				strat = argv[++i];
+			}
+
+			if (strcmp(strat, "user") == 0) {
+				conflict_strat = KEEP_USER;
+			} else if (strcmp(strat, "source") == 0) {
+				conflict_strat = KEEP_SOURCE;
+			} else if (strcmp(strat, "ignore") == 0) {
+				conflict_strat = REMOVE_BOTH;
+			} else {
+				PANIC("Invalid value to `--conflict`. Only `user`, `source`, and `ignore` are allowed.");
+			}
+			continue;
+		}
+
+		if (filename != NULL) {
+			PANIC("Input file has already been specified: '%s' replaces '%s'", argv[i], *filename);
+		}
+
+		filename = (Cstr *) &argv[i];
+	}
+
+	if (filename == NULL) {
+		PANIC("Input file has not been specified.");
+	}
+
+	// Simply output the file if no identifiers are allowed to used
+	if (!process_all_identifiers && !include_all_files && allowed_identifiers.count == 0 && allowed_files.count == 0) {
+		char buf[4096];
+		Fd fd = fd_open_for_read(*filename);
+		size_t read_bytes = 0;
+		while ((read_bytes = fd_read(fd, buf, 4096)) != 0) {
+			fd_write(fd_stdout, buf, read_bytes);
+		}
+		fd_close(fd);
+		return 0;
 	}
 
 	// Disable TODO and INFO messages.
 	logLevel = LOG_LEVELS_WARN;
 
-	pre_process_file(argv[1], macro_table_make(), scope_stack_make(), 0);
+	pre_process_file(*filename, macro_table_make(), scope_stack_make(), 0);
 }
