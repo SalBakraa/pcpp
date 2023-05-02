@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## [0.2.2] - 2023-05-02
+
+### Added
+
+- Add `--implicitly-undef` flag to treate undetermined macros as undefined.
+- Add `--line-around-include` flag to surround included code with line directives.
+- Add `-o` and `--output` flags to redired `pcpp`'s output to a file.
+
 ## [0.2.1] - 2023-05-02
 
 ### Fixed
