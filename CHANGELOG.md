@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [0.3.0] - 2023-05-04
+
+### Changed
+
+- **Breaking:** `--only-process` and `--process-all` now only control macros that are in conditionals.
+
+### Added
+
+- Add `--only-define` flag to define a list of macros to process in define derictives.
+- Add `--define-all` flag to process all define directives.
+- Add `--only-undef` flag to define a list of macros to process in undef derictives.
+- Add `--undef-all` flag to process all undef directives.
+- Add `--only` & `--all` flag as replacement to `--only-process` & `--process-all` respectively.
+- Add `--ignore-undetermined` flag as replacement to avoid processing undetermined conditionals.
+
 ## [0.2.3] - 2023-05-02
 
 ### Added
