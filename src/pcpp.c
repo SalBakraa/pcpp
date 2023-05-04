@@ -184,6 +184,12 @@ Cstr_Array allowed_define = {0};
 // Flag that overrides allowed_define
 bool define_all_identifiers = false;
 
+// List of identifiers allowed to be undefed
+Cstr_Array allowed_undef = {0};
+
+// Flag that overrides allowed_undef
+bool undef_all_identifiers = false;
+
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
 
@@ -479,7 +485,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !(undef_all_identifiers || cstr_array_contains(&allowed_undef, lexer_text))) {
 								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
@@ -1244,6 +1250,7 @@ const char *usage =
 	"FLAGS:\n"
 	"\t    --process-all          Process all macro that are encountered in conditionals. Overrides `--only-process`.\n"
 	"\t    --define-all           Process all macro that are encountered in defines. Overrides `--only-define`.\n"
+	"\t    --undef-all            Process all macro that are encountered in undefs. Overrides `--only-undef`.\n"
 	"\t    --include_all          Include all files that are encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
 	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
@@ -1254,6 +1261,7 @@ const char *usage =
 	"\t              -UMACRO, --undef[=]MACRO                    Assume MACRO is undefined when processing.\n"
 	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed in conditionals.\n"
 	"\t                       --only-define[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be defined through code.\n"
+	"\t                       --only-undef[=]MACRO[,MACRO]...    Comma separated list of macros that are allowed to be undefed through code.\n"
 	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
 	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
 	"\t               -oFILE, --output[=]FILE                    Redirect output into FILE.\n"
@@ -1308,6 +1316,26 @@ int main(int argc, char **argv) {
 
 		if (STARTS_WITH(argv[i], "--define-all")) {
 			define_all_identifiers = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only-undef")) {
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only-undef=")) {
+				id_list = argv[i] + strlen("--only-undef=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-undef`.");
+				}
+				id_list = argv[++i];
+			}
+
+			allowed_undef = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--undef-all")) {
+			undef_all_identifiers = true;
 			continue;
 		}
 
@@ -1463,9 +1491,11 @@ int main(int argc, char **argv) {
 	// Simply output the file if no identifiers are allowed to used
 	if (!process_all_identifiers
 			&& !define_all_identifiers
+			&& !undef_all_identifiers
 			&& !include_all_files
 			&& allowed_process.count == 0
 			&& allowed_define.count == 0
+			&& allowed_undef.count == 0
 			&& allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
