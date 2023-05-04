@@ -1257,6 +1257,7 @@ const char *usage =
 	"\t    --process-all          Process all macro that are encountered in conditionals. Overrides `--only-process`.\n"
 	"\t    --define-all           Process all macro that are encountered in defines. Overrides `--only-define`.\n"
 	"\t    --undef-all            Process all macro that are encountered in undefs. Overrides `--only-undef`.\n"
+	"\t    --all                  Process all macros encountered. Implies `--process-all`, `--define-all`, `--undef-all`.\n"
 	"\t    --expand-all           Expands all macro that are encountered. Overrides `--only-expand`.\n"
 	"\t    --include_all          Include all files that are encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
@@ -1269,6 +1270,7 @@ const char *usage =
 	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed in conditionals.\n"
 	"\t                       --only-define[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be defined through code.\n"
 	"\t                       --only-undef[=]MACRO[,MACRO]...    Comma separated list of macros that are allowed to be undefed through code.\n"
+	"\t                       --only[=]MACRO[,MACRO]...          Comma separated list of macros that are allowed to be processed. Implies `--only-process`, `--only-define`, `--only-undef`.\n"
 	"\t                       --only-expand[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be expanded in code.\n"
 	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
 	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
@@ -1384,6 +1386,30 @@ int main(int argc, char **argv) {
 
 		if (STARTS_WITH(argv[i], "--include-all")) {
 			include_all_files = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only")) {
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only=")) {
+				id_list = argv[i] + strlen("--only=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only`.");
+				}
+				id_list = argv[++i];
+			}
+
+			allowed_process = SPLIT(id_list, ",");
+			allowed_define = SPLIT(id_list, ",");
+			allowed_undef = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--all")) {
+			process_all_identifiers = true;
+			define_all_identifiers = true;
+			undef_all_identifiers = true;
 			continue;
 		}
 
