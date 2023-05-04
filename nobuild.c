@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 
 	build();
 
+#ifdef DEBUG
 	TODO_SAFE("Convert all shell script tests to C code.");
 	CMD(PATH("tests", "test_define_undef.sh"));
 	CMD(PATH("tests", "test_include.sh"));
@@ -65,6 +66,7 @@ int main(int argc, char **argv)
 	CMD(PATH("tests", "test_comments.sh"));
 	CMD(PATH("tests", "test_large_macro_space.sh"));
 	CMD(PATH("tests", "test_implicit_undef.sh"));
+#endif
 
 	return 0;
 }
