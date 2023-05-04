@@ -102,7 +102,7 @@ cat << EOF > expected_output
 #	endif
 EOF
 
-build/pcpp --only-process=macro1 test_input > actual_output
+build/pcpp --only-define=macro1 --only-process=macro1  test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
@@ -151,7 +151,7 @@ cat << EOF > expected_output
 #	endif
 EOF
 
-build/pcpp --only-process=macro1 test_input > actual_output
+build/pcpp --only-undef=macro1 --only-process=macro1 test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
@@ -217,7 +217,7 @@ cat << EOF > expected_output
 #endif
 EOF
 
-build/pcpp --only-process=macro1_a_b test_input > actual_output
+build/pcpp --only-define=macro1_a_b --process-all test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
