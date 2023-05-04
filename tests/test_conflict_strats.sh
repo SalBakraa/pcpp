@@ -14,7 +14,7 @@ cat << EOF > expected_output
 print("Ignored source");
 EOF
 
-build/pcpp --only-process=macro -Dmacro --conflict=user test_input > actual_output
+build/pcpp --all -Dmacro --conflict=user test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
@@ -40,7 +40,7 @@ cat << EOF > expected_output
 print("Ignored command line");
 EOF
 
-build/pcpp --only-process=macro -Dmacro --conflict=source test_input > actual_output
+build/pcpp --all -Dmacro --conflict=source test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
@@ -68,7 +68,7 @@ print("Ignored both");
 #endif
 EOF
 
-build/pcpp --only-process=macro -Dmacro --conflict=ignore test_input > actual_output
+build/pcpp --all -Dmacro --conflict=ignore test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"

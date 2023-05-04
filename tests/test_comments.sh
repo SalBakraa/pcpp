@@ -16,7 +16,7 @@ print("tested");
 #/*endif*/
 EOF
 
-build/pcpp --process-all test_input > actual_output
+build/pcpp --all test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
@@ -51,7 +51,7 @@ print/*
 #/*endif*/
 EOF
 
-build/pcpp --process-all test_input > actual_output
+build/pcpp --all test_input > actual_output
 
 if diff --color=always -y actual_output expected_output > /dev/null ; then
 	printf "\033[0;32m%s PASSED\033[0m\n" "$test_case_name"
