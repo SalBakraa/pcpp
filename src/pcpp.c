@@ -178,6 +178,12 @@ Cstr_Array allowed_process = {0};
 // Flag that overrides allowed_identifiers
 bool process_all_identifiers = false;
 
+// List of identifiers allowed to be defined
+Cstr_Array allowed_define = {0};
+
+// Flag that overrides allowed_define
+bool define_all_identifiers = false;
+
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
 
@@ -553,7 +559,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process) {
+							if (!curr_scope->should_process || !(define_all_identifiers || cstr_array_contains(&allowed_define, lexer_text))) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
@@ -607,12 +613,10 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case L_PAREN:
-							if (!curr_scope->should_process) {
-								state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
-								break;
+							if (curr_scope->should_process && (define_all_identifiers || cstr_array_contains(&allowed_define, lexer_text))) {
+								macro_table_peek(symbol_table)->is_function = true;
 							}
 
-							macro_table_peek(symbol_table)->is_function = true;
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 							break;
 						default:
@@ -644,12 +648,12 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case IDENTIFIER:
-							if (curr_scope->should_process) {
+							if (curr_scope->should_process && (define_all_identifiers || cstr_array_contains(&allowed_define, lexer_text))) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 							}
 							break;
 						case ELLIPSIS:
-							if (curr_scope->should_process) {
+							if (curr_scope->should_process && (define_all_identifiers || cstr_array_contains(&allowed_define, lexer_text))) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 								TODO_SAFE("Verify that the ellipsis is the last argument.");
 							}
@@ -659,7 +663,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
-					if (curr_scope->should_process) {
+					if (curr_scope->should_process && (define_all_identifiers || cstr_array_contains(&allowed_define, lexer_text))) {
 						macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
 					}
 					break;
@@ -1239,6 +1243,7 @@ const char *usage =
 	"\n"
 	"FLAGS:\n"
 	"\t    --process-all          Process all macro that are encountered in conditionals. Overrides `--only-process`.\n"
+	"\t    --define-all           Process all macro that are encountered in defines. Overrides `--only-define`.\n"
 	"\t    --include_all          Include all files that are encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
 	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
@@ -1248,6 +1253,7 @@ const char *usage =
 	"\t-DMACRO[(ARGS)][=DEF], --define[=]MACRO[(ARGS)][=DEF]     Assume MACRO is defined when processing.\n"
 	"\t              -UMACRO, --undef[=]MACRO                    Assume MACRO is undefined when processing.\n"
 	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed in conditionals.\n"
+	"\t                       --only-define[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be defined through code.\n"
 	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
 	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
 	"\t               -oFILE, --output[=]FILE                    Redirect output into FILE.\n"
@@ -1282,6 +1288,26 @@ int main(int argc, char **argv) {
 
 		if (STARTS_WITH(argv[i], "--process-all")) {
 			process_all_identifiers = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only-define")) {
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only-define=")) {
+				id_list = argv[i] + strlen("--only-define=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-define`.");
+				}
+				id_list = argv[++i];
+			}
+
+			allowed_define = SPLIT(id_list, ",");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--define-all")) {
+			define_all_identifiers = true;
 			continue;
 		}
 
@@ -1435,7 +1461,12 @@ int main(int argc, char **argv) {
 	}
 
 	// Simply output the file if no identifiers are allowed to used
-	if (!process_all_identifiers && !include_all_files && allowed_process.count == 0 && allowed_files.count == 0) {
+	if (!process_all_identifiers
+			&& !define_all_identifiers
+			&& !include_all_files
+			&& allowed_process.count == 0
+			&& allowed_define.count == 0
+			&& allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
