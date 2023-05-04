@@ -172,8 +172,8 @@ bool cstr_array_contains(Cstr_Array *arr, Cstr val) {
 	return false;
 }
 
-// List of identifiers allowed to be expanded and defined/undefined
-Cstr_Array allowed_identifiers = {0};
+// List of identifiers allowed to be processed inside conditionals
+Cstr_Array allowed_process = {0};
 
 // Flag that overrides allowed_identifiers
 bool process_all_identifiers = false;
@@ -773,7 +773,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))
 									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
@@ -1276,7 +1276,7 @@ int main(int argc, char **argv) {
 				id_list = argv[++i];
 			}
 
-			allowed_identifiers = SPLIT(id_list, ",");
+			allowed_process = SPLIT(id_list, ",");
 			continue;
 		}
 
@@ -1435,7 +1435,7 @@ int main(int argc, char **argv) {
 	}
 
 	// Simply output the file if no identifiers are allowed to used
-	if (!process_all_identifiers && !include_all_files && allowed_identifiers.count == 0 && allowed_files.count == 0) {
+	if (!process_all_identifiers && !include_all_files && allowed_process.count == 0 && allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
 		size_t read_bytes = 0;
