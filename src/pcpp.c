@@ -190,6 +190,12 @@ Cstr_Array allowed_undef = {0};
 // Flag that overrides allowed_undef
 bool undef_all_identifiers = false;
 
+// List of identifiers allowed to be expanded
+Cstr_Array allowed_expand = {0};
+
+// Flag that overrides allowed_expand
+bool expand_all_identifiers = false;
+
 // List of file names allowed to be expanded into the final output
 Cstr_Array allowed_files = {0};
 
@@ -1251,6 +1257,7 @@ const char *usage =
 	"\t    --process-all          Process all macro that are encountered in conditionals. Overrides `--only-process`.\n"
 	"\t    --define-all           Process all macro that are encountered in defines. Overrides `--only-define`.\n"
 	"\t    --undef-all            Process all macro that are encountered in undefs. Overrides `--only-undef`.\n"
+	"\t    --expand-all           Expands all macro that are encountered. Overrides `--only-expand`.\n"
 	"\t    --include_all          Include all files that are encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
 	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
@@ -1262,6 +1269,7 @@ const char *usage =
 	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed in conditionals.\n"
 	"\t                       --only-define[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be defined through code.\n"
 	"\t                       --only-undef[=]MACRO[,MACRO]...    Comma separated list of macros that are allowed to be undefed through code.\n"
+	"\t                       --only-expand[=]MACRO[,MACRO]...   Comma separated list of macros that are allowed to be expanded in code.\n"
 	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
 	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
 	"\t               -oFILE, --output[=]FILE                    Redirect output into FILE.\n"
@@ -1336,6 +1344,26 @@ int main(int argc, char **argv) {
 
 		if (STARTS_WITH(argv[i], "--undef-all")) {
 			undef_all_identifiers = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--only-expand")) {
+			Cstr id_list;
+			if (STARTS_WITH(argv[i], "--only-expand=")) {
+				id_list = argv[i] + strlen("--only-expand=");
+			} else {
+				if ((i + 1) >= argc) {
+					PANIC("Missing argument to `--only-expand`.");
+				}
+				id_list = argv[++i];
+			}
+
+			TODO("Macro expansions is not implemented yet.");
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--expand-all")) {
+			TODO("Macro expansions is not implemented yet.");
 			continue;
 		}
 
@@ -1492,10 +1520,12 @@ int main(int argc, char **argv) {
 	if (!process_all_identifiers
 			&& !define_all_identifiers
 			&& !undef_all_identifiers
+			&& !expand_all_identifiers
 			&& !include_all_files
 			&& allowed_process.count == 0
 			&& allowed_define.count == 0
 			&& allowed_undef.count == 0
+			&& allowed_expand.count == 0
 			&& allowed_files.count == 0) {
 		char buf[4096];
 		Fd fd = fd_open_for_read(*filename);
