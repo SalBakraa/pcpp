@@ -208,6 +208,9 @@ bool surround_includes_with_line = false;
 // Flag to have undetermined macros be implicitly-undefined
 bool implicitly_undefine = false;
 
+// Flag to determine if undetermined conditionals should be processed
+bool process_undetermined = true;
+
 // User table of definitions
 macro_table *user_symbol_table = NULL;
 
@@ -429,7 +432,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 								scope_item *top = scope_stack_push(scopes);
 								top->conditional_was_processed = false;
 								top->conditional_was_resolved = false;
-								top->should_process = curr_scope->should_process;
+								top->should_process = process_undetermined ? curr_scope->should_process : process_undetermined;
 								top->should_output = curr_scope->should_output;
 								TODO_SAFE("Actually process expressions passed to `#if`");
 							} else if (strcmp(lexer_text, "ifdef") == 0) {
@@ -710,10 +713,17 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))
-									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
+								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
+								break;
+							}
+
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
+								top->conditional_was_processed = false;
+								top->should_process = process_undetermined ? curr_scope->should_process : process_undetermined;
 								top->should_output = curr_scope->should_process;
 								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
@@ -789,12 +799,19 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))
-									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
 								top->should_output = curr_scope->should_process;
 								state = PCPP_DIRECTIVE_IFNDEF_IDENTIFIER;
+								break;
+							}
+
+							if (def->status == MACRO_UNDETERMINED && !implicitly_undefine) {
+								top->conditional_was_processed = false;
+								top->should_process = process_undetermined ? curr_scope->should_process : process_undetermined;
+								top->should_output = curr_scope->should_process;
+								state = PCPP_DIRECTIVE_IFDEF_IDENTIFIER;
 								break;
 							}
 
@@ -1262,6 +1279,7 @@ const char *usage =
 	"\t    --include-all          Include all files encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
 	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
+	"\t    --ignore-undetermined  Avoid processing undetermined conditionals.\n"
 	"\t-h, --help                 Print this usage text and exit\n"
 	"\n"
 	"OPTIONS:\n"
@@ -1521,6 +1539,11 @@ int main(int argc, char **argv) {
 
 		if (STARTS_WITH(argv[i], "--implicitly-undef")) {
 			implicitly_undefine = true;
+			continue;
+		}
+
+		if (STARTS_WITH(argv[i], "--ignore-undetermined")) {
+			process_undetermined = false;
 			continue;
 		}
 
