@@ -473,7 +473,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER: {
-							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+							if (!curr_scope->should_process) {
 								state = PCPP_DIRECTIVE_UNDEF_IDENTIFIER;
 								break;
 							}
@@ -553,7 +553,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							PANIC("Multi-line comment terminator outside of multi-line comment.");
 							break;
 						case IDENTIFIER:
-							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+							if (!curr_scope->should_process) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER;
 								break;
 							}
@@ -607,7 +607,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case L_PAREN:
-							if (!curr_scope->should_process || !(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+							if (!curr_scope->should_process) {
 								state = PCPP_DIRECTIVE_DEF_IDENTIFIER_ARGS;
 								break;
 							}
@@ -644,12 +644,12 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							state = PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT;
 							break;
 						case IDENTIFIER:
-							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+							if (curr_scope->should_process) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 							}
 							break;
 						case ELLIPSIS:
-							if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+							if (curr_scope->should_process) {
 								macro_definition_push_args(macro_table_peek(symbol_table), lexer_text);
 								TODO_SAFE("Verify that the ellipsis is the last argument.");
 							}
@@ -659,7 +659,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 					}
 					break;
 				case PCPP_DIRECTIVE_DEF_IDENTIFIER_REPLACEMENT:
-					if (curr_scope->should_process && (process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))) {
+					if (curr_scope->should_process) {
 						macro_definition_push_replacement(macro_table_peek(symbol_table), lexer_text);
 					}
 					break;
@@ -694,7 +694,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 							}
 
 							scope_item *top = scope_stack_push(scopes);
-							if (!(process_all_identifiers || cstr_array_contains(&allowed_identifiers, lexer_text))
+							if (!(process_all_identifiers || cstr_array_contains(&allowed_process, lexer_text))
 									|| (def->status == MACRO_UNDETERMINED && !implicitly_undefine)) {
 								top->conditional_was_processed = false;
 								top->should_process = curr_scope->should_process;
@@ -1238,8 +1238,8 @@ const char *usage =
 	"\tpcpp [FLAGS] [OPTIONS] <FILE>\n"
 	"\n"
 	"FLAGS:\n"
-	"\t    --process-all          Process all macro that are encountered. Overrides `--only-process`.\n"
-	"\t    --include_all          Include all files that are encountered. Overrides `--only-include`.\n"
+	"\t    --process-all          Process all macro that are encountered in conditionals. Overrides `--only-process`.\n"
+	"\t    --include_all          Include all files that are encountered in includes. Overrides `--only-include`.\n"
 	"\t    --implicitly-undef     Implicitly treat undetermined macros as if they are undefined\n"
 	"\t    --line-around-include  Surround the lines added by include directives with line directives.\n"
 	"\t-h, --help                 Print this usage text and exit\n"
@@ -1247,7 +1247,7 @@ const char *usage =
 	"OPTIONS:\n"
 	"\t-DMACRO[(ARGS)][=DEF], --define[=]MACRO[(ARGS)][=DEF]     Assume MACRO is defined when processing.\n"
 	"\t              -UMACRO, --undef[=]MACRO                    Assume MACRO is undefined when processing.\n"
-	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed.\n"
+	"\t                       --only-process[=]MACRO[,MACRO]...  Comma separated list of macros that are allowed to be processed in conditionals.\n"
 	"\t                       --only-include[=]FILE[,FILE]...    Comma separated list of macros that are allowed to be included.\n"
 	"\t                       --conflict[=]STRATEGY              The STRATEGY taken when a derictive conflicts with `-D`/-U. (user, source, ignore)\n"
 	"\t               -oFILE, --output[=]FILE                    Redirect output into FILE.\n"
