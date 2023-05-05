@@ -66,6 +66,7 @@ int main(int argc, char **argv)
 	CMD(PATH("tests", "test_comments.sh"));
 	CMD(PATH("tests", "test_large_macro_space.sh"));
 	CMD(PATH("tests", "test_implicit_undef.sh"));
+	CMD(PATH("tests", "test_backslash_newline.sh"));
 #endif
 
 	return 0;

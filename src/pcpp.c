@@ -280,7 +280,7 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 		PANIC("Could not change current directory to '%s': %s", filedir, nobuild__strerror(errno));
 	}
 
-	// Merge lines that end in '\'
+	// Merge lines that end in '\' into a "single" line
 	for (size_t i = 0; i < lines.count;) {
 		size_t line_len = strlen(lines.elems[i]);
 		// Avoid lines ending in \\<newline>
@@ -292,13 +292,14 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 		Cstr next_line = cstr_array_remove(&lines, lines.elems[i+1]);
 		size_t next_line_len = strlen(next_line);
 
-		size_t total_line_len = next_line_len + (line_len - 1); // don't count the '\' character
+		size_t total_line_len = next_line_len + line_len + 1; // account for the missing newline char
 		lines.elems[i] = realloc((char *) lines.elems[i], sizeof *lines.elems[i] * (total_line_len + 1));
 		if (lines.elems[i] == NULL) {
 			PANIC("Could not allocate memory: %s", nobuild__strerror(errno));
 		}
 
-		memcpy((char *) lines.elems[i] + (line_len-1), next_line, next_line_len +1);
+		((char *) lines.elems[i])[line_len] = '\n';
+		memcpy((char *) lines.elems[i] + (line_len + 1), next_line, next_line_len + 1);
 		free((char *)next_line);
 	}
 

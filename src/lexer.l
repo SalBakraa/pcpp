@@ -45,6 +45,7 @@ WARNING_DISABLE
 	GEN_FUNC(COMMENT)              \
 	GEN_FUNC(COMMENT_START)        \
 	GEN_FUNC(COMMENT_END)          \
+	GEN_FUNC(BACKSLASH_NEWLINE)    \
 	GEN_FUNC(ELLIPSIS)             \
 	GEN_FUNC(ASSIGN_L_SHIFT)       \
 	GEN_FUNC(ASSIGN_R_SHIFT)       \
@@ -130,6 +131,8 @@ UNICODE_ESCAPE \\(u[[:digit:]]{4}|U[[:digit:]]{6})
 "//".*                                                              { return COMMENT; }
 "/*"                                                                { return COMMENT_START; }
 "*/"                                                                { return COMMENT_END; }
+
+"\\\n"                                                              { return BACKSLASH_NEWLINE; }
 
 "..."                                                               { return ELLIPSIS; }
 "<<="                                                               { return ASSIGN_L_SHIFT; }
