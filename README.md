@@ -23,6 +23,21 @@ Running `pcpp --define-all input` leads to:
 #endif
 ```
 
+If you are abusing *backslash-newline* in your directives, then the behaviour of `pcpp` is not clear. It can either be
+added to the final code as is, or it might cause the parser to crash. the following example shows both:
+
+```c
+// The following is parsed correctly
+#define test do {   \
+	printf("test"); \
+} while (0);
+
+// The following line crashes the parser
+#ifdef macro \
+
+#endif
+```
+
 ## Building
 
 1. Bootstrap build system: `cc -o nobuild nobuild.c`

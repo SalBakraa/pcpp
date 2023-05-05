@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.3.1] - 2023-05-05
+
+### Changed
+
+- Backslash newlines in code are maintained as is now.
+
 ## [0.3.0] - 2023-05-04
 
 ### Changed
