@@ -303,13 +303,11 @@ void pre_process_file(Cstr filename, Fd output, macro_table *symbol_table, scope
 		free((char *)next_line);
 	}
 
-
 	bool is_inside_comment = false;
 	PCPP_STATE stored_state = PCPP_INITIAL; // Used when exiting multi-line comments
 	Cstr_Array stored_output_line = cstr_array_make(NULL);
 	bool stored_append_current_token = true;
 	bool stored_current_line_was_processed = false;
-
 
 	// The last line is an empty extra line
 	for (size_t i = 0; i < lines.count-1; ++i) {

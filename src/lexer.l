@@ -121,7 +121,7 @@ UNICODE_ESCAPE \\(u[[:digit:]]{4}|U[[:digit:]]{6})
 
 ([_[:alpha:]$]|{UNICODE_ESCAPE})([_[:alnum:]$]|{UNICODE_ESCAPE})*   { return IDENTIFIER; }
 
-\.?[[:digit:]](.|{UNICODE_ESCAPE})*                                 { return PREPROCESSING_NUMBER; }
+\.?[[:digit:]]([0-9a-zA-Z._+-]|{UNICODE_ESCAPE})*                   { return PREPROCESSING_NUMBER; }
 
 \".*\"                                                              { return STRING_LITERAL; }
 \'.*\'                                                              { return CHAR_LITERAL; }
