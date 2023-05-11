@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## [0.3.2] - 2023-05-11
+
+### Fixed
+
+- Fixed preprocessor numbers not being parsed correctly
+
 ## [0.3.1] - 2023-05-05
 
 ### Changed
